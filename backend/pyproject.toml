@@ -1,5 +1,0 @@
-[tool.pylint.main]
-init-hook = "import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath('pyproject.toml')))"
-
-[tool.pylint.format]
-max-line-length = 100

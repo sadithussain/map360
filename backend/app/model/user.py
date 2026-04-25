@@ -1,20 +1,58 @@
-"""User ORM model and related helpers."""
-import uuid
+from datetime import datetime
+from uuid import UUID
 
-from app import db
+from pydantic import BaseModel, EmailStr, Field
 
 
-class User(db.Model):
-    """Application user persisted in the `users` table."""
+class GeoPoint(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
 
-    __tablename__ = 'users'
 
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    first_name = db.Column(db.String(50), nullable=True)
-    last_name = db.Column(db.String(50), nullable=True)
-    hashed_password = db.Column(db.String(256), nullable=False)
+class UserBase(BaseModel):
+    email: EmailStr
+    username: str = Field(..., min_length=1, max_length=32)
+    avatar_url: str | None = None
 
-    def __repr__(self) -> str:
-        return f'<User {self.username}>'
+
+class User(UserBase):
+    id: UUID
+    last_location: GeoPoint | None = None
+    location_updated_at: datetime | None = None
+    active_group_id: UUID | None = None
+    xp_score: int = Field(0, ge=0)
+    models_generated: int = Field(0, ge=0)
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class UserInDB(User):
+    hashed_password: str
+
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class UserUpdate(BaseModel):
+    username: str | None = Field(None, min_length=1, max_length=32)
+    avatar_url: str | None = None
+    active_group_id: UUID | None = None
+
+
+class UserLocationUpdate(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+
+
+class UserPublic(BaseModel):
+    id: UUID
+    username: str
+    avatar_url: str | None = None
+    xp_score: int
+    models_generated: int
