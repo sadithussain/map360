@@ -18,4 +18,6 @@ class User(Base):
 
     created_at = Column(DateTime, default = lambda: datetime.now(timezone.utc))
 
-    
+    memberships = relationship("Membership", back_populates = "user", cascade = "all, delete-orphan")
+
+    submissions = relationship("Submission", back_populates = "user", cascade = "all, delete-orphan")
