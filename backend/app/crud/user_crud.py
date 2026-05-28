@@ -7,12 +7,11 @@ session and handling HTTP-level errors (e.g. 404 when a lookup returns None).
 
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.security import get_password_hash
 from app.models.user_model import User
 from app.schemas.user_schema import UserCreate
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:

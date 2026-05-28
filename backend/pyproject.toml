@@ -1,0 +1,15 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["app"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Migration files are generated/edited with Alembic conventions.
+"alembic/*" = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

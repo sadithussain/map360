@@ -6,15 +6,16 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 1. Foundation and Project Setup
 
-- [ ] Decide on tech stack for backend (FastAPI confirmed), frontend, and 3D rendering library
-- [ ] Set up monorepo structure with `backend/` and `frontend/` folders
-- [ ] Add dependency management files (`requirements.txt` / `pyproject.toml`, `package.json`)
-- [ ] Configure environment variable handling (`.env`, settings module)
-- [ ] Set up local PostgreSQL (or chosen DB) for development
-- [ ] Configure object storage for media uploads (S3, local dev bucket, etc.)
-- [ ] Add Alembic (or equivalent) for database migrations
-- [ ] Set up linting, formatting, and pre-commit hooks
-- [ ] Create initial README with setup and run instructions
+- [x] Decide on tech stack for backend (FastAPI confirmed), PWA frontend (Vite + React + TS), and 3D rendering library (Three.js / React Three Fiber)
+- [x] Set up monorepo structure with `backend/` and `frontend/` folders
+- [x] Add dependency management files (`requirements.txt` / `pyproject.toml`, `package.json`)
+- [x] Configure environment variable handling (`.env`, settings module)
+- [x] Set up Supabase Postgres (replaces local PostgreSQL) for development
+- [x] Configure object storage for media uploads (Supabase Storage settings/env in place)
+- [x] Configure PWA basics (web app manifest, service worker, installable app shell)
+- [x] Add Alembic (or equivalent) for database migrations
+- [x] Set up linting, formatting, and pre-commit hooks
+- [x] Create initial README with setup and run instructions
 
 ---
 
