@@ -1,8 +1,8 @@
 """ORM model definitions for application users.
 
-The User table is the central identity record. Related rows (memberships,
-submissions) are removed when a user is deleted via cascade rules on the
-relationships below.
+The User table is the central identity record. Relationships to future tables
+(group memberships, content submissions) are intentionally omitted until those
+models are implemented in later stages.
 """
 
 import uuid
@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
@@ -25,8 +24,6 @@ class User(Base):
         hashed_password: bcrypt digest from ``app.core.security``; never plain text.
         experience_points: Cumulative XP earned across the platform.
         created_at: UTC timestamp set when the row is first created.
-        memberships: Group memberships owned by this user.
-        submissions: Content submissions authored by this user.
     """
 
     __tablename__ = "users"
@@ -46,16 +43,4 @@ class User(Base):
     created_at = Column(
         DateTime,
         default=lambda: datetime.now(UTC),
-    )
-
-    memberships = relationship(
-        "Membership",
-        back_populates="user",
-        cascade="all, delete-orphan",
-    )
-
-    submissions = relationship(
-        "Submission",
-        back_populates="user",
-        cascade="all, delete-orphan",
     )

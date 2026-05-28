@@ -1,1 +1,15 @@
 """Database configuration and SQLAlchemy declarative base."""
+
+from app.db.database import (
+    AsyncSessionLocal,
+    Base,
+    engine,
+    get_db,
+)
+
+__all__ = [
+    "AsyncSessionLocal",
+    "Base",
+    "engine",
+    "get_db",
+]

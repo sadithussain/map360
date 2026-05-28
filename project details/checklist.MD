@@ -21,8 +21,8 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 2. User Accounts and Authentication
 
-- [ ] Finish `User` SQLAlchemy model wiring (relationships compile end-to-end)
-- [ ] Implement async database engine and `AsyncSession` factory in `db/database.py`
+- [x] Finish `User` SQLAlchemy model wiring (relationships compile end-to-end)
+- [x] Implement async database engine and `AsyncSession` factory in `db/database.py`
 - [ ] Implement user registration endpoint (`POST /users/register`)
 - [ ] Implement login endpoint with password verification
 - [ ] Add JWT (or session) token issuance and validation
