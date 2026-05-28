@@ -10,6 +10,19 @@ select = ["E", "F", "I", "UP", "B", "W"]
 # Migration files are generated/edited with Alembic conventions.
 "alembic/*" = ["E501"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI uses callables in argument defaults (Depends, Query, etc.) by design.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Form",
+    "fastapi.File",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
