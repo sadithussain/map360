@@ -7,7 +7,6 @@ session and handling HTTP-level errors (e.g. 404 when a lookup returns None).
 
 from uuid import UUID
 
-from app.core.security import get_password_hash
 from app.models.user_model import User
 from app.schemas.user_schema import UserCreate
 from sqlalchemy import select
@@ -31,17 +30,18 @@ async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def create_user(db: AsyncSession, user: UserCreate) -> User:
-    """Persist a new user from validated registration input.
+async def create_user(
+    db: AsyncSession, user: UserCreate, hashed_password: str
+) -> User:
+    """Persist a new user from validated input and a pre-hashed password.
 
-    Hashes ``user.password`` before insert, commits the transaction, and
-    returns the refreshed ORM instance (including server-generated fields).
+    The service layer is responsible for hashing ``user.password``; this
+    function commits the transaction and returns the refreshed ORM instance
+    (including server-generated fields).
     """
-    hashed_pw = get_password_hash(user.password)
-
     db_user = User(
         **user.model_dump(exclude={"password"}),
-        hashed_password=hashed_pw,
+        hashed_password=hashed_password,
     )
 
     db.add(db_user)
