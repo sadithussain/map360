@@ -6,10 +6,14 @@ CRUD layer. Routers should depend on this module rather than calling CRUD
 functions directly.
 """
 
-from app.core.security import get_password_hash
+from app.core.security import (
+    create_access_token,
+    get_password_hash,
+    verify_password,
+)
 from app.crud.user_crud import create_user, get_user_by_email
 from app.models.user_model import User
-from app.schemas.user_schema import UserCreate
+from app.schemas.user_schema import Token, UserCreate, UserLogin
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,3 +35,28 @@ async def register_user(db: AsyncSession, user: UserCreate) -> User:
     hashed_password = get_password_hash(user.password)
 
     return await create_user(db, user, hashed_password)
+
+
+async def authenticate_user(db: AsyncSession, credentials: UserLogin) -> Token:
+    """Verify login credentials and return a signed access token.
+
+    Looks up the user by email and checks the password against the stored
+    bcrypt hash. Raises ``401 UNAUTHORIZED`` with a generic message for both
+    unknown emails and bad passwords so callers cannot probe which accounts
+    exist. On success, issues a JWT whose subject is the user's id.
+    """
+    invalid_credentials = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect email or password.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    user = await get_user_by_email(db, credentials.email)
+    if user is None or not verify_password(
+        credentials.password, user.hashed_password
+    ):
+        raise invalid_credentials
+
+    access_token = create_access_token(subject=str(user.id))
+
+    return Token(access_token=access_token)

@@ -51,3 +51,20 @@ class UserResponse(UserBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserLogin(BaseModel):
+    """Payload for authenticating an existing user."""
+
+    email: EmailStr = Field(..., description="The user's email address")
+    password: str = Field(..., description="Raw, unhashed password")
+
+
+class Token(BaseModel):
+    """Access token issued after a successful login."""
+
+    access_token: str = Field(..., description="Signed JWT access token")
+    token_type: str = Field(
+        default="bearer",
+        description="Token type for the Authorization header",
+    )
