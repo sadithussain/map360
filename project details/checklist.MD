@@ -26,7 +26,7 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Implement user registration endpoint (`POST /users/register`)
 - [x] Implement login endpoint with password verification
 - [x] Add JWT (or session) token issuance and validation
-- [ ] Add auth dependency for protecting routes
+- [x] Add auth dependency for protecting routes
 - [ ] Implement "get current user" endpoint (`GET /users/me`)
 - [ ] Handle duplicate username/email errors at the API layer
 - [ ] Add basic password reset / change password flow (optional v1)
