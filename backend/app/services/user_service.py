@@ -11,11 +11,21 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.crud.user_crud import create_user, get_user_by_email
+from app.crud.user_crud import create_user, get_user_by_email, get_user_by_username
 from app.models.user_model import User
 from app.schemas.user_schema import Token, UserCreate, UserLogin
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
+    """Return the user with the given email, or None if no match exists."""
+    return await get_user_by_email(db, email)
+
+
+async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
+    """Return the user with the given username, or None if no match exists."""
+    return await get_user_by_username(db, username)
 
 
 async def register_user(db: AsyncSession, user: UserCreate) -> User:

@@ -21,6 +21,14 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def get_user_by_username(db: AsyncSession, username: str) -> User | None:
+    """Return the user with the given username, or None if no match exists."""
+    statement = select(User).where(User.username == username)
+
+    result = await db.execute(statement)
+    return result.scalar_one_or_none()
+
+
 async def get_user_by_id(db: AsyncSession, user_id: UUID) -> User | None:
     """Return the user with the given primary key, or None if no match exists."""
     statement = select(User).where(User.id == user_id)
