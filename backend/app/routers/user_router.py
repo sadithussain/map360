@@ -1,10 +1,12 @@
 """HTTP routes for user accounts.
 
-Exposes user registration and login with JWT issuance. The protected
-``/users/me`` endpoint is implemented in a later stage.
+Exposes user registration, login with JWT issuance, and the protected
+``/users/me`` endpoint for retrieving the authenticated user's profile.
 """
 
 from app.db.database import get_db
+from app.dependencies.auth import get_current_user as get_authenticated_user
+from app.models.user_model import User
 from app.schemas.user_schema import Token, UserCreate, UserLogin, UserResponse
 from app.services.user_service import authenticate_user
 from app.services.user_service import register_user as register_user_service
@@ -43,3 +45,16 @@ async def login_user(
     stored hash and responds with ``401`` for invalid credentials.
     """
     return await authenticate_user(db, credentials)
+
+
+@router.get("/me", response_model=UserResponse)
+async def read_current_user(
+    current_user: User = Depends(get_authenticated_user),
+) -> UserResponse:
+    """Return the authenticated user's own profile.
+
+    Identity comes from the validated Bearer token via the auth dependency,
+    so no user id is accepted from the client. Credentials are never included
+    in the ``UserResponse`` output.
+    """
+    return current_user
