@@ -8,7 +8,7 @@ from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.models.user_model import User
 from app.schemas.user_schema import Token, UserCreate, UserLogin, UserResponse
-from app.services.user_service import authenticate_user
+from app.services.user_service import authenticate_user, check_email_exists as check_email_exists_service, check_username_exists as check_username_exists_service
 from app.services.user_service import register_user as register_user_service
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +27,9 @@ async def register_user(
 ) -> UserResponse:
     """Register a new user and return the created account.
 
-    Delegates to the service layer, which rejects registration when the email
-    is already in use and hashes the raw password before persistence; the
-    response never includes credentials.
+    Delegates to the service layer, which hashes the raw password before
+    persistence and returns a generic ``409`` conflict if the email or
+    username is already taken; the response never includes credentials.
     """
     return await register_user_service(db, user)
 
@@ -58,3 +58,30 @@ async def read_current_user(
     in the ``UserResponse`` output.
     """
     return current_user
+
+@router.get("/exists/email/{email}", response_model=bool)
+async def check_email_exists(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """Report whether the given email is already registered.
+
+    Supports field-level feedback while the user fills out the registration
+    form. Registration does not depend on this check; the database unique
+    constraint remains the race-safe guard against duplicates.
+    """
+    return await check_email_exists_service(db, email)
+
+
+@router.get("/exists/username/{username}", response_model=bool)
+async def check_username_exists(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+) -> bool:
+    """Report whether the given username is already taken.
+
+    Supports field-level feedback while the user fills out the registration
+    form. Registration does not depend on this check; the database unique
+    constraint remains the race-safe guard against duplicates.
+    """
+    return await check_username_exists_service(db, username)
