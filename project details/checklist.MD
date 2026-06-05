@@ -29,7 +29,7 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Add auth dependency for protecting routes
 - [x] Implement "get current user" endpoint (`GET /users/me`)
 - [x] Handle duplicate username/email errors at the API layer
-- [ ] Add basic password reset / change password flow (optional v1)
+- [x] Add basic password reset / change password flow (optional v1)
 
 ---
 

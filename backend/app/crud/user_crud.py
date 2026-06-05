@@ -66,3 +66,21 @@ async def create_user(
     await db.refresh(db_user)
 
     return db_user
+
+async def update_user_password(
+    db: AsyncSession, user: User, hashed_password: str
+) -> User:
+    """Persist a new password hash for an existing user.
+
+    The caller is responsible for resolving the user and hashing the password;
+    this function only writes ``hashed_password`` and commits the change,
+    returning the refreshed ORM instance.
+    """
+    user.hashed_password = hashed_password
+
+    db.add(user)
+    await db.commit()
+
+    await db.refresh(user)
+
+    return user

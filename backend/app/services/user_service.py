@@ -12,9 +12,9 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.crud.user_crud import create_user, get_user_by_email as get_user_by_email_crud, get_user_by_username as get_user_by_username_crud
+from app.crud.user_crud import create_user, get_user_by_email as get_user_by_email_crud, get_user_by_username as get_user_by_username_crud, update_user_password as update_user_password_crud
 from app.models.user_model import User
-from app.schemas.user_schema import Token, UserCreate, UserLogin
+from app.schemas.user_schema import Token, UserCreate, UserLogin, UserPasswordChange
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,3 +100,24 @@ async def authenticate_user(db: AsyncSession, credentials: UserLogin) -> Token:
     access_token = create_access_token(subject=str(user.id))
 
     return Token(access_token=access_token)
+
+
+async def change_user_password(
+    db: AsyncSession, user: User, passwords: UserPasswordChange
+) -> User:
+    """Change the authenticated user's password and return the updated record.
+
+    Verifies ``current_password`` against the stored hash before hashing and
+    persisting ``new_password``. Raises ``401 UNAUTHORIZED`` when the current
+    password is incorrect so the caller cannot change a password without
+    proving knowledge of the existing one.
+    """
+    if not verify_password(passwords.current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect.",
+        )
+
+    hashed_password = get_password_hash(passwords.new_password)
+
+    return await update_user_password_crud(db, user, hashed_password)

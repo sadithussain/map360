@@ -60,6 +60,26 @@ class UserLogin(BaseModel):
     password: str = Field(..., description="Raw, unhashed password")
 
 
+class UserPasswordChange(BaseModel):
+    """Payload for changing the authenticated user's password.
+
+    The ``current_password`` is verified against the stored hash in the service
+    layer before ``new_password`` is hashed and persisted. ``new_password``
+    enforces the same length rules as registration.
+    """
+
+    current_password: str = Field(
+        ...,
+        description="The user's current, unhashed password",
+    )
+    new_password: str = Field(
+        ...,
+        min_length=8,
+        max_length=100,
+        description="The new, raw, unhashed password",
+    )
+
+
 class Token(BaseModel):
     """Access token issued after a successful login."""
 
