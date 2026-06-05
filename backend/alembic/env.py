@@ -2,7 +2,7 @@ import asyncio
 from logging.config import fileConfig
 
 # Import models so their tables register on ``Base.metadata`` for autogenerate.
-import app.models.user_model  # noqa: F401
+import app.models  # noqa: F401
 from alembic import context
 from app.core.config import get_settings
 from app.db.database import Base

@@ -1,8 +1,8 @@
 """ORM model definitions for application users.
 
-The User table is the central identity record. Relationships to future tables
-(group memberships, content submissions) are intentionally omitted until those
-models are implemented in later stages.
+The User table is the central identity record. It links to the groups a user
+owns and the memberships connecting them to groups; content-submission
+relationships remain deferred until those models are implemented.
 """
 
 import uuid
@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
@@ -24,6 +25,8 @@ class User(Base):
         hashed_password: bcrypt digest from ``app.core.security``; never plain text.
         experience_points: Cumulative XP earned across the platform.
         created_at: UTC timestamp set when the row is first created.
+        owned_groups: Groups this user created and owns.
+        memberships: Membership rows linking this user to groups they belong to.
     """
 
     __tablename__ = "users"
@@ -43,4 +46,14 @@ class User(Base):
     created_at = Column(
         DateTime,
         default=lambda: datetime.now(UTC),
+    )
+
+    owned_groups = relationship(
+        "Group",
+        back_populates="owner",
+    )
+    memberships = relationship(
+        "Membership",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
