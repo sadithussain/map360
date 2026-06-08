@@ -40,8 +40,8 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Create Pydantic schemas for groups and memberships
 - [x] Endpoint to create a new group
 - [ ] Endpoint to join a group (invite code or invitation)
-- [ ] Endpoint to list a user's groups
-- [ ] Endpoint to list members of a group
+- [x] Endpoint to list a user's groups
+- [x] Endpoint to list members of a group
 - [ ] Endpoint to leave / remove a member from a group
 - [ ] Enforce group-only visibility on every group-scoped resource
 - [ ] Add permission helpers ("is member of group", "is owner of group")

@@ -1,15 +1,18 @@
 """HTTP routes for groups.
 
-Exposes group creation and listing the authenticated user's groups. The acting
-user is resolved from the validated Bearer token via the auth dependency, so no
-owner or user id is accepted from the client.
+Exposes group creation, listing the authenticated user's groups, and listing the
+members of a group. The acting user is resolved from the validated Bearer token
+via the auth dependency, so no owner or user id is accepted from the client.
 """
+
+from uuid import UUID
 
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.models.user_model import User
 from app.schemas.group_schema import GroupCreate, GroupResponse
-from app.services.group_service import create_group as create_group_service, get_user_groups as get_user_groups_service
+from app.schemas.user_schema import UserResponse
+from app.services.group_service import create_group as create_group_service, get_group_members as get_group_members_service, get_user_groups as get_user_groups_service
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,3 +54,22 @@ async def get_my_groups(
     membership, including groups they own and groups they have joined.
     """
     return await get_user_groups_service(db, current_user)
+
+
+@router.get(
+    "/{group_id}/members",
+    response_model=list[UserResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def get_group_members(
+    group_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserResponse]:
+    """List the members of the group with the given id.
+
+    Identity comes from the validated Bearer token. The service layer enforces
+    that the group exists and that the authenticated user belongs to it before
+    any members are returned, preserving group privacy isolation.
+    """
+    return await get_group_members_service(db, group_id, current_user)
