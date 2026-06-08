@@ -9,6 +9,7 @@ from uuid import UUID
 
 from app.models.group_model import Group, Membership
 from app.schemas.group_schema import GroupCreate
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -41,3 +42,24 @@ async def create_group(
     await db.refresh(db_group)
 
     return db_group
+
+async def get_user_groups(
+    db: AsyncSession,
+    user_id: UUID,
+) -> list[Group]:
+    """Return every group the user belongs to via a membership.
+
+    Joins the ``memberships`` table so the result includes both groups the
+    user owns and groups they have joined. Ordered by ``created_at`` for a
+    stable response. Returns a concrete list of ``Group`` instances.
+    """
+    statement = (
+        select(Group)
+        .join(Membership, Membership.group_id == Group.id)
+        .where(Membership.user_id == user_id)
+        .order_by(Group.created_at)
+    )
+
+    result = await db.execute(statement)
+
+    return list(result.scalars().all())
