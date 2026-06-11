@@ -3,6 +3,8 @@
 from app.schemas.group_schema import (
     GroupBase,
     GroupCreate,
+    GroupInviteCodeResponse,
+    GroupJoinRequest,
     GroupResponse,
     MembershipBase,
     MembershipCreate,
@@ -20,6 +22,8 @@ from app.schemas.user_schema import (
 __all__ = [
     "GroupBase",
     "GroupCreate",
+    "GroupInviteCodeResponse",
+    "GroupJoinRequest",
     "GroupResponse",
     "MembershipBase",
     "MembershipCreate",

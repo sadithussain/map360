@@ -10,9 +10,9 @@ from uuid import UUID
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.models.user_model import User
-from app.schemas.group_schema import GroupCreate, GroupResponse
+from app.schemas.group_schema import GroupCreate, GroupInviteCodeResponse, GroupJoinRequest, GroupResponse, MembershipResponse
 from app.schemas.user_schema import UserResponse
-from app.services.group_service import create_group as create_group_service, get_group_members as get_group_members_service, get_user_groups as get_user_groups_service
+from app.services.group_service import create_group as create_group_service, create_group_invite_code as create_group_invite_code_service, get_group_members as get_group_members_service, get_user_groups as get_user_groups_service, join_group_by_invite_code as join_group_by_invite_code_service
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +36,45 @@ async def create_group(
     the group and the owner's membership in a single transaction.
     """
     return await create_group_service(db, group, current_user)
+
+
+@router.post(
+    "/join",
+    response_model=MembershipResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def join_group(
+    request: GroupJoinRequest,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> MembershipResponse:
+    """Join the authenticated user to a group using a reusable invite code.
+
+    Identity comes from the validated Bearer token, so the joining user is
+    never trusted from the request. The service validates the invite code,
+    rejects revoked or expired codes, prevents duplicate memberships, and
+    creates a ``member`` membership on success.
+    """
+    return await join_group_by_invite_code_service(db, request, current_user)
+
+
+@router.post(
+    "/{group_id}/invite-code",
+    response_model=GroupInviteCodeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_invite_code(
+    group_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> GroupInviteCodeResponse:
+    """Generate a reusable invite code for a group the user owns.
+
+    Identity comes from the validated Bearer token. The service enforces that
+    the group exists and that the authenticated user owns it before generating
+    a code. The raw code is returned only here, since only its hash is stored.
+    """
+    return await create_group_invite_code_service(db, group_id, current_user)
 
 
 @router.get(

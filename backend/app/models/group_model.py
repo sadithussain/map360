@@ -3,7 +3,9 @@
 A ``Group`` is the shared container that scopes map content: every member of a
 group can later see contributions made by other members of the same group. A
 ``Membership`` is the join record linking a ``User`` to a ``Group`` along with
-their role, enforcing that a user joins a given group at most once.
+their role, enforcing that a user joins a given group at most once. A
+``GroupInviteCode`` is a reusable secret that lets a user join a group without
+exposing the group's raw id as the join secret.
 """
 
 import uuid
@@ -52,6 +54,11 @@ class Group(Base):
     owner = relationship("User", back_populates="owned_groups")
     memberships = relationship(
         "Membership",
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
+    invite_codes = relationship(
+        "GroupInviteCode",
         back_populates="group",
         cascade="all, delete-orphan",
     )
@@ -105,3 +112,53 @@ class Membership(Base):
 
     user = relationship("User", back_populates="memberships")
     group = relationship("Group", back_populates="memberships")
+
+
+class GroupInviteCode(Base):
+    """A reusable secret that grants membership to a single ``Group``.
+
+    Only the SHA-256 hash of the raw code is stored, so a leaked database row
+    cannot be replayed as a join secret. A code may optionally expire and may
+    be revoked, letting a group owner rotate codes without deleting history.
+
+    Attributes:
+        id: Primary key; UUID generated on insert.
+        group_id: Foreign key to the ``Group`` this code grants access to.
+        code_hash: SHA-256 hex digest of the raw invite code; unique.
+        created_by_id: Foreign key to the ``User`` who generated the code.
+        created_at: UTC timestamp set when the code is created.
+        expires_at: Optional UTC timestamp after which the code is invalid.
+        revoked_at: Optional UTC timestamp marking the code as revoked.
+        group: The ``Group`` this code belongs to.
+    """
+
+    __tablename__ = "group_invite_codes"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        index=True,
+    )
+    group_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("groups.id"),
+        nullable=False,
+        index=True,
+    )
+    code_hash = Column(String, nullable=False, unique=True, index=True)
+    created_by_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+    )
+    expires_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    group = relationship("Group", back_populates="invite_codes")

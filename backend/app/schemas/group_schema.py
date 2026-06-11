@@ -80,3 +80,34 @@ class MembershipResponse(MembershipBase):
     joined_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GroupJoinRequest(BaseModel):
+    """Payload for joining a group via a reusable invite code.
+
+    Only the raw ``invite_code`` is accepted; the joining user is resolved from
+    the authenticated ``User`` in the service layer rather than trusted from the
+    request body.
+    """
+
+    invite_code: str = Field(
+        ...,
+        min_length=1,
+        description="Reusable invite code that grants membership to a group",
+    )
+
+
+class GroupInviteCodeResponse(BaseModel):
+    """Invite code returned once at creation time.
+
+    The raw ``invite_code`` is exposed only in this response because the
+    database stores just its hash; callers must persist or share it themselves.
+    """
+
+    group_id: UUID
+    invite_code: str = Field(
+        ...,
+        description="Raw invite code, shown only at creation time",
+    )
+    created_at: datetime
+    expires_at: datetime | None = None

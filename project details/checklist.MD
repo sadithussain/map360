@@ -39,7 +39,7 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Define `Membership` model (user, group, role, joined_at)
 - [x] Create Pydantic schemas for groups and memberships
 - [x] Endpoint to create a new group
-- [ ] Endpoint to join a group (invite code or invitation)
+- [x] Endpoint to join a group (invite code or invitation)
 - [x] Endpoint to list a user's groups
 - [x] Endpoint to list members of a group
 - [ ] Endpoint to leave / remove a member from a group
