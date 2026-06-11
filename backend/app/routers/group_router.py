@@ -1,8 +1,10 @@
 """HTTP routes for groups.
 
-Exposes group creation, listing the authenticated user's groups, and listing the
-members of a group. The acting user is resolved from the validated Bearer token
-via the auth dependency, so no owner or user id is accepted from the client.
+Exposes group creation, joining via invite code, invite-code generation, listing
+the authenticated user's groups, listing the members of a group, leaving a group,
+and removing a member from a group. The acting user is resolved from the
+validated Bearer token via the auth dependency, so no owner or user id is
+accepted from the client.
 """
 
 from uuid import UUID
@@ -12,7 +14,7 @@ from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.models.user_model import User
 from app.schemas.group_schema import GroupCreate, GroupInviteCodeResponse, GroupJoinRequest, GroupResponse, MembershipResponse
 from app.schemas.user_schema import UserResponse
-from app.services.group_service import create_group as create_group_service, create_group_invite_code as create_group_invite_code_service, get_group_members as get_group_members_service, get_user_groups as get_user_groups_service, join_group_by_invite_code as join_group_by_invite_code_service
+from app.services.group_service import create_group as create_group_service, create_group_invite_code as create_group_invite_code_service, get_group_members as get_group_members_service, get_user_groups as get_user_groups_service, join_group_by_invite_code as join_group_by_invite_code_service, leave_group as leave_group_service, remove_group_member as remove_group_member_service
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -112,3 +114,41 @@ async def get_group_members(
     any members are returned, preserving group privacy isolation.
     """
     return await get_group_members_service(db, group_id, current_user)
+
+
+@router.delete(
+    "/{group_id}/members/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def leave_group(
+    group_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the authenticated user's own membership from a group.
+
+    Identity comes from the validated Bearer token. The service raises ``404``
+    if the group does not exist, ``403`` if the user is not a member, and
+    ``409`` if the user owns the group. Responds with ``204 No Content``.
+    """
+    await leave_group_service(db, group_id, current_user)
+
+
+@router.delete(
+    "/{group_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_group_member(
+    group_id: UUID,
+    user_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove another member from a group the authenticated user owns.
+
+    Identity comes from the validated Bearer token. The service enforces that
+    the group exists, that the requester owns it, that the target is not the
+    owner, and that the target is a member before deleting the membership.
+    Responds with ``204 No Content``.
+    """
+    await remove_group_member_service(db, group_id, user_id, current_user)

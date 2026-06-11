@@ -9,7 +9,7 @@ import secrets
 from datetime import UTC, datetime
 from uuid import UUID
 
-from app.crud.group_crud import create_group as create_group_crud, create_group_invite_code as create_group_invite_code_crud, create_membership as create_membership_crud, get_group_by_id as get_group_by_id_crud, get_group_members as get_group_members_crud, get_invite_code_by_hash as get_invite_code_by_hash_crud, get_membership as get_membership_crud, get_user_groups as get_user_groups_crud
+from app.crud.group_crud import create_group as create_group_crud, create_group_invite_code as create_group_invite_code_crud, create_membership as create_membership_crud, get_group_by_id as get_group_by_id_crud, get_group_members as get_group_members_crud, get_invite_code_by_hash as get_invite_code_by_hash_crud, get_membership as get_membership_crud, get_user_groups as get_user_groups_crud, remove_membership as remove_membership_crud
 from app.models.group_model import Group, Membership
 from app.models.user_model import User
 from app.schemas.group_schema import GroupCreate, GroupInviteCodeResponse, GroupJoinRequest
@@ -182,3 +182,99 @@ async def create_group_invite_code(
         created_at=invite_code.created_at,
         expires_at=invite_code.expires_at,
     )
+
+
+async def is_group_member(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+) -> bool:
+    """Return ``True`` if the authenticated user is a member of the group.
+
+    Raises ``404`` if the group does not exist. Returns ``False`` when the user
+    has no membership in the group.
+    """
+    await get_group_by_id(db, group_id)
+    membership = await get_membership_crud(db, group_id, current_user.id)
+    return membership is not None
+
+
+async def is_group_owner(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+) -> bool:
+    """Return ``True`` if the authenticated user owns the given group.
+
+    Raises ``404`` if the group does not exist. Ownership is resolved from the
+    group's ``owner_id`` rather than the membership role, which is the
+    authoritative source of truth.
+    """
+    group = await get_group_by_id(db, group_id)
+    return group.owner_id == current_user.id
+
+
+async def leave_group(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+) -> None:
+    """Remove the authenticated user's own membership from a group.
+
+    Raises ``404`` if the group does not exist, ``403`` if the user is not a
+    member of it, and ``409`` if the user owns the group (an owner must transfer
+    ownership before leaving). Deletes the membership row on success.
+    """
+    group = await get_group_by_id(db, group_id)
+
+    membership = await get_membership_crud(db, group_id, current_user.id)
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of this group.",
+        )
+
+    if group.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The group owner cannot leave the group.",
+        )
+
+    await remove_membership_crud(db, group_id, current_user.id)
+
+
+async def remove_group_member(
+    db: AsyncSession,
+    group_id: UUID,
+    user_id: UUID,
+    current_user: User,
+) -> None:
+    """Remove another member from a group the authenticated user owns.
+
+    Raises ``404`` if the group does not exist, ``403`` if the authenticated
+    user is not the group owner, ``409`` if the target is the owner (the owner
+    cannot be removed), and ``404`` if the target user is not a member. Deletes
+    the target membership row on success.
+    """
+    group = await get_group_by_id(db, group_id)
+
+    if group.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the group owner can remove members.",
+        )
+
+    if user_id == group.owner_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The group owner cannot be removed from the group.",
+        )
+
+    membership = await get_membership_crud(db, group_id, user_id)
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This user is not a member of the group.",
+        )
+
+    await remove_membership_crud(db, group_id, user_id)

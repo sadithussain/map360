@@ -11,7 +11,7 @@ from uuid import UUID
 from app.models.group_model import Group, GroupInviteCode, Membership
 from app.models.user_model import User
 from app.schemas.group_schema import GroupCreate
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -189,3 +189,26 @@ async def get_group_members(
     result = await db.execute(statement)
 
     return list(result.scalars().all())
+
+
+async def remove_membership(
+    db: AsyncSession,
+    group_id: UUID,
+    user_id: UUID
+) -> bool:
+    """Remove a membership linking a user to a group.
+
+    Deletes the membership row linking a user to a group. Returns ``True`` if a
+    membership was deleted, ``False`` otherwise.
+    """
+
+    statement = delete(Membership).where(
+        Membership.group_id == group_id,
+        Membership.user_id == user_id
+    )
+
+    result = await db.execute(statement)
+
+    await db.commit()
+
+    return result.rowcount > 0

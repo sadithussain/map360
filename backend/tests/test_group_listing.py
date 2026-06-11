@@ -126,4 +126,8 @@ def test_current_user_route_has_no_user_id_path_param() -> None:
     }
 
     assert "/groups/me" in group_paths
-    assert not any("{user_id}" in path for path in group_paths)
+    # The acting user's own identity is resolved from the token, never from the
+    # path (we use "/groups/me", not "/groups/{user_id}"). A target user id on an
+    # owner-only action such as removing a member is a different concept and is
+    # allowed.
+    assert "/groups/{user_id}" not in group_paths
