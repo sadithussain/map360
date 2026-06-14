@@ -43,8 +43,8 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Endpoint to list a user's groups
 - [x] Endpoint to list members of a group
 - [x] Endpoint to leave / remove a member from a group
-- [ ] Enforce group-only visibility on every group-scoped resource
-- [ ] Add permission helpers ("is member of group", "is owner of group")
+- [x] Enforce group-only visibility on every group-scoped resource
+- [x] Add permission helpers ("is member of group", "is owner of group")
 
 ---
 
