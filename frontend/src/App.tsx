@@ -1,15 +1,13 @@
-import { WorldMap } from "./components/WorldMap";
-import "./App.css";
+import Navbar from "./components/Navbar";
 
 function App() {
   return (
-    <div className="app">
-      <header className="app__header">
-        <span className="app__brand">Map360</span>
-        <span className="app__tagline">Collaborative 3D world mapping</span>
+    <div>
+      <header>
+        <Navbar />
       </header>
-      <main className="app__canvas">
-        <WorldMap />
+      <main>
+
       </main>
     </div>
   );
