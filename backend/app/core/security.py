@@ -1,29 +1,45 @@
 """Password hashing and JWT utilities.
 
-Passwords use bcrypt via passlib's CryptContext; plain-text passwords must never
-be stored or logged. Access tokens are application-issued JWTs signed with the
-secret and algorithm from :mod:`app.core.config`.
+Passwords are hashed with bcrypt (using the ``bcrypt`` library directly);
+plain-text passwords must never be stored or logged. Access tokens are
+application-issued JWTs signed with the secret and algorithm from
+:mod:`app.core.config`.
 """
 
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 import jwt
-from passlib.context import CryptContext
-
 from app.core.config import get_settings
 
-# bcrypt is the default scheme; "auto" marks older hashes for upgrade on verify.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only considers the first 72 bytes of a password, and modern versions
+# raise if given more. Inputs are truncated to that limit before hashing, which
+# also matches the previous passlib-based behaviour so existing stored hashes
+# still verify.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _to_bcrypt_bytes(password: str) -> bytes:
+    """Encode a password to UTF-8 and cap it at bcrypt's 72-byte limit."""
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def get_password_hash(password: str) -> str:
     """Return a bcrypt hash suitable for persisting on a user record."""
-    return pwd_context.hash(password)
+    hashed = bcrypt.hashpw(_to_bcrypt_bytes(password), bcrypt.gensalt())
+    return hashed.decode("utf-8")
 
 
 def verify_password(password: str, hashed_password: str) -> bool:
     """Return True if the plain-text password matches the stored hash."""
-    return pwd_context.verify(password, hashed_password)
+    try:
+        return bcrypt.checkpw(
+            _to_bcrypt_bytes(password), hashed_password.encode("utf-8")
+        )
+    except ValueError:
+        # A malformed or unrecognized hash string is treated as a non-match
+        # rather than propagating, so callers always receive a clean boolean.
+        return False
 
 
 def create_access_token(

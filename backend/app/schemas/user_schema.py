@@ -11,14 +11,21 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+# Shared constraint bounds, reused by the Pydantic fields below and by the
+# service layer so frontend, schema, and service validation never drift apart.
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 50
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 100
+
 
 class UserBase(BaseModel):
     """Shared user fields used by both input and response schemas."""
 
     username: str = Field(
         ...,
-        min_length=3,
-        max_length=50,
+        min_length=USERNAME_MIN_LENGTH,
+        max_length=USERNAME_MAX_LENGTH,
         description="The user's unique display name",
     )
     email: EmailStr = Field(..., description="The user's email address")
@@ -33,8 +40,8 @@ class UserCreate(UserBase):
 
     password: str = Field(
         ...,
-        min_length=8,
-        max_length=100,
+        min_length=PASSWORD_MIN_LENGTH,
+        max_length=PASSWORD_MAX_LENGTH,
         description="Raw, unhashed password",
     )
 
@@ -74,8 +81,8 @@ class UserPasswordChange(BaseModel):
     )
     new_password: str = Field(
         ...,
-        min_length=8,
-        max_length=100,
+        min_length=PASSWORD_MIN_LENGTH,
+        max_length=PASSWORD_MAX_LENGTH,
         description="The new, raw, unhashed password",
     )
 

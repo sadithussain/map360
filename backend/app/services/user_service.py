@@ -14,9 +14,53 @@ from app.core.security import (
 )
 from app.crud.user_crud import create_user, get_user_by_email as get_user_by_email_crud, get_user_by_username as get_user_by_username_crud, update_user_password as update_user_password_crud
 from app.models.user_model import User
-from app.schemas.user_schema import Token, UserCreate, UserLogin, UserPasswordChange
+from app.schemas.user_schema import (
+    PASSWORD_MAX_LENGTH,
+    PASSWORD_MIN_LENGTH,
+    USERNAME_MAX_LENGTH,
+    USERNAME_MIN_LENGTH,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserPasswordChange,
+)
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _validate_registration_fields(user: UserCreate) -> None:
+    """Raise ``422`` with a clear message if registration fields are invalid.
+
+    Pydantic already enforces these bounds for HTTP requests, but this guards
+    direct service callers and returns a single readable message describing
+    exactly which requirement was not met.
+    """
+    username = user.username.strip()
+    if len(username) < USERNAME_MIN_LENGTH:
+        _raise_unprocessable(
+            f"Username must be at least {USERNAME_MIN_LENGTH} characters."
+        )
+    if len(username) > USERNAME_MAX_LENGTH:
+        _raise_unprocessable(
+            f"Username must be at most {USERNAME_MAX_LENGTH} characters."
+        )
+
+    if len(user.password) < PASSWORD_MIN_LENGTH:
+        _raise_unprocessable(
+            f"Password must be at least {PASSWORD_MIN_LENGTH} characters."
+        )
+    if len(user.password) > PASSWORD_MAX_LENGTH:
+        _raise_unprocessable(
+            f"Password must be at most {PASSWORD_MAX_LENGTH} characters."
+        )
+
+
+def _raise_unprocessable(detail: str) -> None:
+    """Raise a ``422 UNPROCESSABLE ENTITY`` error with a readable message."""
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=detail,
+    )
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -58,10 +102,13 @@ async def check_username_exists(db: AsyncSession, username: str) -> bool:
 async def register_user(db: AsyncSession, user: UserCreate) -> User:
     """Register a new user and return the persisted account.
 
-    Hashes the raw password, then persists via the CRUD layer. On a unique
-    constraint violation for email or username, rolls back the session and
-    raises ``409 CONFLICT`` with a generic conflict message.
+    Validates field requirements, hashes the raw password, then persists via
+    the CRUD layer. On a unique constraint violation for email or username,
+    rolls back the session and raises ``409 CONFLICT`` with a generic conflict
+    message.
     """
+    _validate_registration_fields(user)
+
     hashed_password = get_password_hash(user.password)
 
     try:

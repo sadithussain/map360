@@ -44,7 +44,7 @@ class User(Base):
     experience_points = Column(Integer, default=0, nullable=False)
 
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 

@@ -5,7 +5,7 @@ from logging.config import fileConfig
 import app.models  # noqa: F401
 from alembic import context
 from app.core.config import get_settings
-from app.db.database import Base
+from app.db.database import Base, transaction_pooler_connect_args
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -69,10 +69,19 @@ async def run_async_migrations() -> None:
 
     """
 
+    engine_kwargs: dict = {"poolclass": pool.NullPool}
+    # Supabase's transaction pooler (port 6543) cannot track asyncpg prepared
+    # statements; disable statement caching so migrations don't fail there.
+    pooler_args = transaction_pooler_connect_args(
+        config.get_main_option("sqlalchemy.url") or ""
+    )
+    if pooler_args is not None:
+        engine_kwargs["connect_args"] = pooler_args
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+        **engine_kwargs,
     )
 
     async with connectable.connect() as connection:
