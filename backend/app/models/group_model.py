@@ -47,7 +47,7 @@ class Group(Base):
     )
 
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 
@@ -106,7 +106,7 @@ class Membership(Base):
     role = Column(String, nullable=False, default="member")
 
     joined_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 
@@ -155,10 +155,10 @@ class GroupInviteCode(Base):
     )
 
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
-    expires_at = Column(DateTime, nullable=True)
-    revoked_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
 
     group = relationship("Group", back_populates="invite_codes")
