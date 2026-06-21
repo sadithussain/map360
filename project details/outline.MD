@@ -62,8 +62,8 @@ Map evolves over time into a community-built 3D environment
 
 5. Map System Design
 5.1 Base Map
-Initially empty, stylized grey terrain/world
-No default buildings or landmarks
+Grey-styled real-world map base with street layout and generic building footprints
+No user-generated buildings or landmarks (those are added by group contributions)
 5.2 Layered Construction
 Each group has a separate layer of:
 Buildings (user-generated)

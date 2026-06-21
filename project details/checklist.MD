@@ -51,8 +51,8 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 ## 4. Map Experience (Group-Scoped World State)
 
 - [X] Build the initial frontend shell (auth screens, group selector)
-- [ ] Render a minimal grey 3D world map (no default buildings)
-- [ ] Implement camera controls: zoom, pan, navigate
+- [x] Render a minimal grey geographic base map (streets + building outlines, no user-generated models)
+- [x] Implement camera controls: zoom, pan, navigate
 - [ ] Load and render group-specific map state from the backend
 - [ ] Switch active group and reload the corresponding map layer
 - [ ] Cache map state for smoother navigation
