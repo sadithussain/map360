@@ -1,17 +1,20 @@
 import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ApiError,
+  checkEmailExists,
+  checkUsernameExists,
+  register,
+} from "../lib/api";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Mirror the backend schema constraints in backend/app/schemas/user_schema.py.
-// The backend remains the source of truth; these enable immediate feedback.
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 50;
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 100;
 const EMAIL_MAX = 254;
-
-const API_BASE_URL = "http://127.0.0.1:8000";
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function LengthHint({ length, max }: { length: number; max: number }) {
   const atMax = length >= max;
@@ -48,7 +51,7 @@ function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  let isFormValid =
+  const isFormValid =
   !checkingAvailability &&
   !submitting &&
   Object.values(errors).every(error => error === "") &&
@@ -96,12 +99,7 @@ function Register() {
 
   async function checkEmailAvailability(email: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/exists/email/${encodeURIComponent(email)}`);
-      if (!response.ok) {
-        throw new Error(`Failed to check email availability: ${response.statusText}`);
-      }
-      const exists: boolean = await response.json();
-
+      const exists = await checkEmailExists(email);
       return !exists;
     } catch (error) {
       console.error(`Failed to check email availability: ${error}`);
@@ -111,12 +109,7 @@ function Register() {
 
   async function checkUsernameAvailability(username: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE_URL}/users/exists/username/${encodeURIComponent(username)}`);
-      if (!response.ok) {
-        throw new Error(`Failed to check username availability: ${response.statusText}`);
-      }
-      const exists: boolean = await response.json();
-
+      const exists = await checkUsernameExists(username);
       return !exists;
     } catch (error) {
       console.error(`Failed to check username availability: ${error}`);
@@ -211,29 +204,23 @@ function Register() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/users/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          username: formData.username,
-          password: formData.password,
-        }),
+      await register({
+        email: formData.email,
+        username: formData.username,
+        password: formData.password,
       });
-
-      if (!response.ok) {
-        if (response.status === 409) {
-          setSubmitError("A user with this email or username already exists.");
-        } else {
-          setSubmitError("Registration failed. Please try again.");
-        }
-        return;
-      }
-
       navigate("/login");
     } catch (error) {
-      console.error(`Failed to register: ${error}`);
-      setSubmitError("Unable to reach the server. Please try again.");
+      if (error instanceof ApiError) {
+        if (error.status === 409) {
+          setSubmitError("A user with this email or username already exists.");
+        } else {
+          setSubmitError(error.message);
+        }
+      } else {
+        console.error(`Failed to register: ${error}`);
+        setSubmitError("Unable to reach the server. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }

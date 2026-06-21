@@ -50,7 +50,7 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 4. Map Experience (Group-Scoped World State)
 
-- [ ] Build the initial frontend shell (auth screens, group selector)
+- [X] Build the initial frontend shell (auth screens, group selector)
 - [ ] Render a minimal grey 3D world map (no default buildings)
 - [ ] Implement camera controls: zoom, pan, navigate
 - [ ] Load and render group-specific map state from the backend

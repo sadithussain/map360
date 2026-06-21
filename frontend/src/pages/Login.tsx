@@ -1,13 +1,14 @@
 import { ChangeEvent, FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { login, ApiError } from "../lib/api";
 import { saveAuthToken } from "../lib/auth";
-
-const API_BASE_URL = "http://127.0.0.1:8000";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/groups";
 
   const [formData, setFormData] = useState({
     email: "",
@@ -36,31 +37,23 @@ function Login() {
     setSubmitError("");
     setSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/users/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+      const data = await login({
+        email: formData.email,
+        password: formData.password,
       });
-
-      if (!response.ok) {
-        if (response.status === 401) {
+      saveAuthToken(data.access_token, data.token_type);
+      navigate(redirectTo);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        if (error.status === 401) {
           setSubmitError("Incorrect email or password.");
         } else {
-          setSubmitError("Login failed. Please try again.");
+          setSubmitError(error.message || "Login failed. Please try again.");
         }
-        return;
+      } else {
+        console.error(`Failed to log in: ${error}`);
+        setSubmitError("Unable to reach the server. Please try again.");
       }
-
-      const data: { access_token: string; token_type: string } =
-        await response.json();
-      saveAuthToken(data.access_token, data.token_type);
-      navigate("/");
-    } catch (error) {
-      console.error(`Failed to log in: ${error}`);
-      setSubmitError("Unable to reach the server. Please try again.");
     } finally {
       setSubmitting(false);
     }

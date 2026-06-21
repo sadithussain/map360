@@ -1,40 +1,64 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
+import {
+  ProtectedRoute,
+  PublicOnlyRoute,
+} from "./components/ProtectedRoute";
 import { WorldMap } from "./components/WorldMap";
-import Register from "./pages/Register";
-import Login from "./pages/Login";
+import { AppProvider } from "./context/AppContext";
 import About from "./pages/About";
-import { clearAuthToken, isLoggedIn, onAuthChange } from "./lib/auth";
+import AppShell from "./pages/AppShell";
+import Groups from "./pages/Groups";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 
 function App() {
-  const navigate = useNavigate();
-  const [loggedIn, setLoggedIn] = useState(isLoggedIn());
-
-  useEffect(() => {
-    return onAuthChange(() => setLoggedIn(isLoggedIn()));
-  }, []);
-
-  function handleLogout() {
-    clearAuthToken();
-    navigate("/login");
-  }
-
   return (
-    <div className="flex h-screen flex-col">
-      <header>
-        <Navbar loggedIn={loggedIn} onLogout={handleLogout} />
-      </header>
-      <main className="min-h-0 flex-1">
-        <Routes>
-          <Route path="/" element={<WorldMap />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/about" element={<About />} />
-        </Routes>
-      </main>
-    </div>
+    <AppProvider>
+      <div className="flex h-screen flex-col">
+        <header>
+          <Navbar />
+        </header>
+        <main className="min-h-0 flex-1">
+          <Routes>
+            <Route path="/" element={<WorldMap />} />
+            <Route path="/about" element={<About />} />
+            <Route
+              path="/login"
+              element={
+                <PublicOnlyRoute>
+                  <Login />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <PublicOnlyRoute>
+                  <Register />
+                </PublicOnlyRoute>
+              }
+            />
+            <Route
+              path="/groups"
+              element={
+                <ProtectedRoute>
+                  <Groups />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app"
+              element={
+                <ProtectedRoute requireActiveGroup>
+                  <AppShell />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </main>
+      </div>
+    </AppProvider>
   );
 }
 
