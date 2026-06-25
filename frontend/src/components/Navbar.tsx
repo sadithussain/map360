@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useApp } from "../context/AppContext";
+import GroupSwitcher from "./GroupSwitcher";
 
 function Navbar() {
   const { user, activeGroup, logout } = useApp();
@@ -18,9 +19,9 @@ function Navbar() {
           <>
             <li className="hidden text-sm text-gray-600 sm:block">
               {user.username}
-              {activeGroup ? (
-                <span className="text-gray-400"> · {activeGroup.name}</span>
-              ) : null}
+            </li>
+            <li>
+              <GroupSwitcher />
             </li>
             <li>
               <Link to="/groups">Groups</Link>

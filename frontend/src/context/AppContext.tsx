@@ -24,6 +24,10 @@ import {
   isLoggedIn,
   onAuthChange,
 } from "../lib/auth";
+import {
+  invalidateMapStateCache,
+  pruneMapStateCache,
+} from "../lib/mapStateCache";
 import type { GroupResponse, UserResponse } from "../lib/types";
 
 type AppContextValue = {
@@ -35,6 +39,7 @@ type AppContextValue = {
   isGroupsLoading: boolean;
   refreshUser: () => Promise<void>;
   refreshGroups: () => Promise<void>;
+  switchGroup: (groupId: string) => void;
   selectGroup: (groupId: string) => void;
   logout: () => void;
 };
@@ -70,6 +75,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (error instanceof UnauthorizedError) {
         clearAuthToken();
         clearActiveGroupId();
+        invalidateMapStateCache();
         setUser(null);
         setGroups([]);
         setActiveGroupIdState(null);
@@ -89,9 +95,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const myGroups = await listMyGroups();
       setGroups(myGroups);
+      pruneMapStateCache(myGroups.map((group) => group.id));
 
       const storedId = getActiveGroupId();
       if (storedId && !myGroups.some((group) => group.id === storedId)) {
+        invalidateMapStateCache(storedId);
         clearActiveGroupId();
         setActiveGroupIdState(null);
       }
@@ -99,6 +107,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (error instanceof UnauthorizedError) {
         clearAuthToken();
         clearActiveGroupId();
+        invalidateMapStateCache();
         setUser(null);
         setGroups([]);
         setActiveGroupIdState(null);
@@ -110,15 +119,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [navigate]);
 
-  const selectGroup = useCallback((groupId: string) => {
+  const switchGroup = useCallback((groupId: string) => {
+    if (groupId === activeGroupId) {
+      return;
+    }
+
     setActiveGroupId(groupId);
     setActiveGroupIdState(groupId);
-    navigate("/app");
-  }, [navigate]);
+  }, [activeGroupId]);
+
+  const selectGroup = useCallback(
+    (groupId: string) => {
+      switchGroup(groupId);
+      navigate("/app");
+    },
+    [navigate, switchGroup],
+  );
 
   const logout = useCallback(() => {
     clearAuthToken();
     clearActiveGroupId();
+    invalidateMapStateCache();
     setUser(null);
     setGroups([]);
     setActiveGroupIdState(null);
@@ -130,6 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const loggedIn = isLoggedIn();
       setHasToken(loggedIn);
       if (!loggedIn) {
+        invalidateMapStateCache();
         setUser(null);
         setGroups([]);
         setActiveGroupIdState(null);
@@ -185,6 +207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isGroupsLoading,
       refreshUser,
       refreshGroups,
+      switchGroup,
       selectGroup,
       logout,
     }),
@@ -197,6 +220,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       isGroupsLoading,
       refreshUser,
       refreshGroups,
+      switchGroup,
       selectGroup,
       logout,
     ],

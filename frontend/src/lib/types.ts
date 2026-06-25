@@ -46,3 +46,24 @@ export type GroupCreate = {
 export type GroupJoinRequest = {
   invite_code: string;
 };
+
+export type LocationPinResponse = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string | null;
+  created_at: string;
+};
+
+export type MapObjectResponse = {
+  id: string;
+  pin_id: string;
+  lat: number;
+  lng: number;
+};
+
+export type MapStateResponse = {
+  group_id: string;
+  pins: LocationPinResponse[];
+  objects: MapObjectResponse[];
+};

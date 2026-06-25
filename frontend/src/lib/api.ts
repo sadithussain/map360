@@ -3,6 +3,7 @@ import type {
   GroupCreate,
   GroupJoinRequest,
   GroupResponse,
+  MapStateResponse,
   MembershipResponse,
   Token,
   UserCreate,
@@ -128,4 +129,8 @@ export function joinGroup(payload: GroupJoinRequest): Promise<MembershipResponse
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getGroupMapState(groupId: string): Promise<MapStateResponse> {
+  return apiFetch<MapStateResponse>(`/groups/${groupId}/map-state`);
 }

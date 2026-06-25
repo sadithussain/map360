@@ -3,7 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.routers import group_router, user_router
+from app.routers import group_router, map_router, user_router
 
 app = FastAPI()
 
@@ -49,6 +49,7 @@ async def validation_exception_handler(
 
 app.include_router(user_router.router)
 app.include_router(group_router.router)
+app.include_router(map_router.router)
 
 
 @app.get("/")

@@ -53,10 +53,10 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [X] Build the initial frontend shell (auth screens, group selector)
 - [x] Render a minimal grey geographic base map (streets + building outlines, no user-generated models)
 - [x] Implement camera controls: zoom, pan, navigate
-- [ ] Load and render group-specific map state from the backend
-- [ ] Switch active group and reload the corresponding map layer
-- [ ] Cache map state for smoother navigation
-- [ ] Handle empty group state ("no contributions yet") gracefully
+- [x] Load and render group-specific map state from the backend
+- [x] Switch active group and reload the corresponding map layer
+- [x] Cache map state for smoother navigation
+- [x] Handle empty group state ("no contributions yet") gracefully
 
 ---
 
