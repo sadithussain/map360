@@ -62,6 +62,11 @@ class Group(Base):
         back_populates="group",
         cascade="all, delete-orphan",
     )
+    location_pins = relationship(
+        "LocationPin",
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
 
 
 class Membership(Base):

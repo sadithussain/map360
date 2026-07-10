@@ -3,11 +3,21 @@ import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import {
+  clearBuildingHighlightLayer,
+  HOVER_BUILDING_LAYER_ID,
+  HOVER_BUILDING_SOURCE_ID,
+  queryBuildingAtPoint,
+  queryBuildingHoverAtPoint,
+  SELECTED_BUILDING_LAYER_ID,
+  SELECTED_BUILDING_SOURCE_ID,
+  upsertBuildingHighlightLayer,
+} from "../lib/buildingSelection";
 import { FALLBACK_MAP_VIEW, getInitialMapView } from "../lib/mapGeolocation";
 import { ensureMapLibreWorker } from "../lib/maplibreSetup";
 import { applyGreyMapStyle } from "../lib/mapGreyStyle";
 import { pinsBounds } from "../lib/mapState";
-import type { LocationPinResponse, MapStateResponse } from "../lib/types";
+import type { LocationPinResponse, MapStateResponse, SelectedBuilding } from "../lib/types";
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const GROUP_PINS_SOURCE_ID = "group-pins";
@@ -18,6 +28,10 @@ type WorldMapVariant = "landing" | "workspace";
 type WorldMapProps = {
   variant?: WorldMapVariant;
   mapState?: MapStateResponse | null;
+  contributeMode?: boolean;
+  selectedBuilding?: SelectedBuilding | null;
+  onBuildingSelect?: (building: SelectedBuilding) => void;
+  onMissedBuildingClick?: () => void;
 };
 
 function pinsToGeoJSON(
@@ -33,6 +47,7 @@ function pinsToGeoJSON(
       },
       properties: {
         label: pin.label ?? "",
+        osm_building_id: pin.osm_building_id,
       },
     })),
   };
@@ -84,20 +99,43 @@ function fitMapToPins(
   });
 }
 
-/**
- * Minimal grey geographic base map with streets and generic 3D building
- * footprints. User-generated models are layered on top in later roadmap
- * sections.
- */
-export function WorldMap({ variant = "landing", mapState = null }: WorldMapProps) {
+export function WorldMap({
+  variant = "landing",
+  mapState = null,
+  contributeMode = false,
+  selectedBuilding = null,
+  onBuildingSelect,
+  onMissedBuildingClick,
+}: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const mapReadyRef = useRef(false);
   const mapStateRef = useRef(mapState);
+  const contributeModeRef = useRef(contributeMode);
+  const selectedBuildingRef = useRef(selectedBuilding);
+  const onBuildingSelectRef = useRef(onBuildingSelect);
+  const onMissedBuildingClickRef = useRef(onMissedBuildingClick);
+  const hoveredBuildingRef = useRef<SelectedBuilding | null>(null);
 
   useEffect(() => {
     mapStateRef.current = mapState;
   }, [mapState]);
+
+  useEffect(() => {
+    contributeModeRef.current = contributeMode;
+  }, [contributeMode]);
+
+  useEffect(() => {
+    selectedBuildingRef.current = selectedBuilding;
+  }, [selectedBuilding]);
+
+  useEffect(() => {
+    onBuildingSelectRef.current = onBuildingSelect;
+  }, [onBuildingSelect]);
+
+  useEffect(() => {
+    onMissedBuildingClickRef.current = onMissedBuildingClick;
+  }, [onMissedBuildingClick]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -122,6 +160,66 @@ export function WorldMap({ variant = "landing", mapState = null }: WorldMapProps
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      if (!contributeModeRef.current) {
+        return;
+      }
+
+      const building = queryBuildingAtPoint(map, event.point);
+      if (building) {
+        onBuildingSelectRef.current?.(building);
+        return;
+      }
+
+      onMissedBuildingClickRef.current?.();
+    };
+
+    const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
+      if (!contributeModeRef.current) {
+        map.getCanvas().style.cursor = "";
+        if (hoveredBuildingRef.current) {
+          hoveredBuildingRef.current = null;
+          clearBuildingHighlightLayer(
+            map,
+            HOVER_BUILDING_SOURCE_ID,
+            HOVER_BUILDING_LAYER_ID,
+          );
+        }
+        return;
+      }
+
+      const building = queryBuildingHoverAtPoint(map, event.point);
+      if (building) {
+        map.getCanvas().style.cursor = "pointer";
+        if (
+          hoveredBuildingRef.current?.osmBuildingId !== building.osmBuildingId
+        ) {
+          hoveredBuildingRef.current = building;
+          upsertBuildingHighlightLayer(
+            map,
+            HOVER_BUILDING_SOURCE_ID,
+            HOVER_BUILDING_LAYER_ID,
+            building,
+            {
+              "fill-color": "#60a5fa",
+              "fill-opacity": 0.35,
+            },
+          );
+        }
+        return;
+      }
+
+      map.getCanvas().style.cursor = "";
+      if (hoveredBuildingRef.current) {
+        hoveredBuildingRef.current = null;
+        clearBuildingHighlightLayer(
+          map,
+          HOVER_BUILDING_SOURCE_ID,
+          HOVER_BUILDING_LAYER_ID,
+        );
+      }
+    };
+
     map.on("load", () => {
       if (disposed) {
         return;
@@ -137,6 +235,9 @@ export function WorldMap({ variant = "landing", mapState = null }: WorldMapProps
       mapReadyRef.current = true;
       map.resize();
     });
+
+    map.on("click", handleClick);
+    map.on("mousemove", handleMouseMove);
 
     map.on("error", (event) => {
       console.error("MapLibre error:", event.error);
@@ -164,6 +265,8 @@ export function WorldMap({ variant = "landing", mapState = null }: WorldMapProps
       mapReadyRef.current = false;
       mapRef.current = null;
       resizeObserver.disconnect();
+      map.off("click", handleClick);
+      map.off("mousemove", handleMouseMove);
       map.remove();
     };
   }, []);
@@ -180,6 +283,51 @@ export function WorldMap({ variant = "landing", mapState = null }: WorldMapProps
       fitMapToPins(map, mapState.pins);
     }
   }, [mapState, variant]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) {
+      return;
+    }
+
+    if (!contributeMode) {
+      map.getCanvas().style.cursor = "";
+      hoveredBuildingRef.current = null;
+      clearBuildingHighlightLayer(
+        map,
+        HOVER_BUILDING_SOURCE_ID,
+        HOVER_BUILDING_LAYER_ID,
+      );
+    }
+  }, [contributeMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) {
+      return;
+    }
+
+    if (selectedBuilding) {
+      upsertBuildingHighlightLayer(
+        map,
+        SELECTED_BUILDING_SOURCE_ID,
+        SELECTED_BUILDING_LAYER_ID,
+        selectedBuilding,
+        {
+          "fill-color": "#4f46e5",
+          "fill-opacity": 0.45,
+          "fill-outline-color": "#312e81",
+        },
+      );
+      return;
+    }
+
+    clearBuildingHighlightLayer(
+      map,
+      SELECTED_BUILDING_SOURCE_ID,
+      SELECTED_BUILDING_LAYER_ID,
+    );
+  }, [selectedBuilding]);
 
   return (
     <div className="relative h-full w-full">

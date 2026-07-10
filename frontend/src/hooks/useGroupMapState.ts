@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, getGroupMapState } from "../lib/api";
 import {
@@ -11,6 +11,7 @@ type UseGroupMapStateResult = {
   mapState: MapStateResponse | null;
   isMapStateLoading: boolean;
   mapStateError: string;
+  refreshMapState: () => Promise<MapStateResponse | null>;
 };
 
 export function useGroupMapState(
@@ -19,6 +20,32 @@ export function useGroupMapState(
   const [mapState, setMapState] = useState<MapStateResponse | null>(null);
   const [isMapStateLoading, setIsMapStateLoading] = useState(false);
   const [mapStateError, setMapStateError] = useState("");
+
+  const refreshMapState = useCallback(async (): Promise<MapStateResponse | null> => {
+    if (!activeGroupId) {
+      return null;
+    }
+
+    setIsMapStateLoading(true);
+    setMapStateError("");
+
+    try {
+      const state = await getGroupMapState(activeGroupId);
+      setCachedMapState(activeGroupId, state);
+      setMapState(state);
+      return state;
+    } catch (error: unknown) {
+      setMapState(null);
+      if (error instanceof ApiError) {
+        setMapStateError(error.message);
+      } else {
+        setMapStateError("Unable to load map state.");
+      }
+      return null;
+    } finally {
+      setIsMapStateLoading(false);
+    }
+  }, [activeGroupId]);
 
   useEffect(() => {
     if (!activeGroupId) {
@@ -79,5 +106,5 @@ export function useGroupMapState(
     };
   }, [activeGroupId]);
 
-  return { mapState, isMapStateLoading, mapStateError };
+  return { mapState, isMapStateLoading, mapStateError, refreshMapState };
 }

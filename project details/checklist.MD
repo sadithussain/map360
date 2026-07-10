@@ -62,14 +62,18 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 5. Location Contribution Flow
 
-- [ ] UI to drop a pin on a real-world location on the map
-- [ ] `LocationPin` model (group, user, lat, lng, label, created_at)
-- [ ] Endpoint to create a location pin within a group
-- [ ] UI flow to choose capture method (3 images vs ~5 second video)
-- [ ] Capture UI for three angled images (left / center / right)
-- [ ] Capture UI for short horizontal video sweep
-- [ ] Client-side validation (file size, count, duration, format)
-- [ ] Attach GPS, group ID, and user ID to each submission
+- [x] Add "Add location" button to enter building-selection mode (workspace only)
+- [x] Make base-map building footprints interactive (MapLibre click + queryRenderedFeatures)
+- [x] Extract osm_id, geometry, and centroid from the clicked building feature
+- [x] Hover + selected-building visual feedback on the map
+- [x] Confirmation UI after building selection (continue / pick another / cancel)
+- [x] `LocationPin` model (group, user, osm_building_id, lat, lng, building_geometry, label, created_at)
+- [x] Endpoint to create a location pin from a selected building within a group
+- [x] UI flow to choose capture method (3 images vs ~5 second video)
+- [x] Capture UI for three angled images (left / center / right)
+- [x] Capture UI for short horizontal video sweep
+- [x] Client-side validation (file size, count, duration, format)
+- [x] Attach building metadata (osm_building_id, centroid), group ID, and user ID to each submission
 
 ---
 

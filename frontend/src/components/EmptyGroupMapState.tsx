@@ -12,8 +12,9 @@ function EmptyGroupMapState({ groupName }: EmptyGroupMapStateProps) {
           No contributions yet
         </h2>
         <p className="mt-2 text-sm text-gray-600">
-          {displayName} doesn&apos;t have any mapped locations yet. Explore the
-          map and add your first location when contribution tools are ready.
+          {displayName} doesn&apos;t have any mapped locations yet. Use{" "}
+          <span className="font-medium">Add location</span> to select a building
+          and start your first scan.
         </p>
       </div>
     </div>

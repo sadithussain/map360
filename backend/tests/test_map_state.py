@@ -91,6 +91,10 @@ async def test_service_returns_empty_default_for_member(monkeypatch) -> None:
         "app.services.map_service.get_membership_crud",
         AsyncMock(return_value=membership),
     )
+    monkeypatch.setattr(
+        "app.services.map_service.list_location_pins_for_group",
+        AsyncMock(return_value=[]),
+    )
 
     result = await get_map_state_service(AsyncMock(), group.id, user)
 
@@ -135,3 +139,4 @@ def test_map_state_route_is_registered() -> None:
     paths = {route.path for route in app.routes if hasattr(route, "path")}
 
     assert "/groups/{group_id}/map-state" in paths
+    assert "/groups/{group_id}/pins" in paths

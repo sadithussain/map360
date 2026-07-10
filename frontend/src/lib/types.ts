@@ -1,5 +1,7 @@
 /** API response shapes mirrored from the backend Pydantic schemas. */
 
+import type { MultiPolygon, Polygon } from "geojson";
+
 export type UserResponse = {
   id: string;
   username: string;
@@ -49,10 +51,41 @@ export type GroupJoinRequest = {
 
 export type LocationPinResponse = {
   id: string;
+  osm_building_id: number;
   lat: number;
   lng: number;
   label: string | null;
   created_at: string;
+};
+
+export type LocationPinCreate = {
+  osm_building_id: number;
+  lat: number;
+  lng: number;
+  building_geometry: Polygon | MultiPolygon;
+  label?: string | null;
+};
+
+export type SelectedBuilding = {
+  osmBuildingId: number;
+  geometry: Polygon | MultiPolygon;
+  centroid: {
+    lat: number;
+    lng: number;
+  };
+};
+
+export type CaptureMethod = "images" | "video";
+
+export type ContributionSubmissionDraft = {
+  pinId: string;
+  groupId: string;
+  userId: string;
+  osmBuildingId: number;
+  lat: number;
+  lng: number;
+  captureMethod: CaptureMethod;
+  files: File[];
 };
 
 export type MapObjectResponse = {

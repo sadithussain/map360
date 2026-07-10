@@ -31,7 +31,7 @@ Can zoom, pan, and navigate
 
 4.2 Adding a New Location (Contribution Flow)
 Step 1: Select Location
-User pins a real-world storefront/location on the map
+User selects a building footprint on the base map
 Step 2: Capture Data
 User provides one of:
 Option A: 3 images

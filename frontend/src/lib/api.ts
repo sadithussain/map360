@@ -3,6 +3,8 @@ import type {
   GroupCreate,
   GroupJoinRequest,
   GroupResponse,
+  LocationPinCreate,
+  LocationPinResponse,
   MapStateResponse,
   MembershipResponse,
   Token,
@@ -133,4 +135,14 @@ export function joinGroup(payload: GroupJoinRequest): Promise<MembershipResponse
 
 export function getGroupMapState(groupId: string): Promise<MapStateResponse> {
   return apiFetch<MapStateResponse>(`/groups/${groupId}/map-state`);
+}
+
+export function createLocationPin(
+  groupId: string,
+  payload: LocationPinCreate,
+): Promise<LocationPinResponse> {
+  return apiFetch<LocationPinResponse>(`/groups/${groupId}/pins`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

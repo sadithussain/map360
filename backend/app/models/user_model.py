@@ -57,3 +57,7 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    location_pins = relationship(
+        "LocationPin",
+        back_populates="user",
+    )

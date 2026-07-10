@@ -1,5 +1,7 @@
 import type { Map } from "maplibre-gl";
 
+import { ensureBuildingPickerLayer } from "./buildingSelection";
+
 function setPaintIfExists(
   map: Map,
   layerId: string,
@@ -132,6 +134,8 @@ export function applyGreyMapStyle(map: Map): void {
       },
     });
   }
+
+  ensureBuildingPickerLayer(map);
 
   for (const layerId of LABEL_LAYER_IDS) {
     setLayoutIfExists(map, layerId, "visibility", "none");
