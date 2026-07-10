@@ -1,6 +1,9 @@
 import type { Map } from "maplibre-gl";
 
-import { ensureBuildingPickerLayer } from "./buildingSelection";
+import {
+  ensureBuildingHighlightAnchorLayer,
+  ensureBuildingPickerLayer,
+} from "./buildingSelection";
 
 function setPaintIfExists(
   map: Map,
@@ -136,6 +139,7 @@ export function applyGreyMapStyle(map: Map): void {
   }
 
   ensureBuildingPickerLayer(map);
+  ensureBuildingHighlightAnchorLayer(map);
 
   for (const layerId of LABEL_LAYER_IDS) {
     setLayoutIfExists(map, layerId, "visibility", "none");

@@ -1,17 +1,17 @@
 import type { FeatureCollection, Point } from "geojson";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import {
-  clearBuildingHighlightLayer,
-  HOVER_BUILDING_LAYER_ID,
-  HOVER_BUILDING_SOURCE_ID,
+  clearAllBuildingHighlightLayers,
+  OPENMAPTILES_SOURCE_ID,
   queryBuildingAtPoint,
   queryBuildingHoverAtPoint,
-  SELECTED_BUILDING_LAYER_ID,
-  SELECTED_BUILDING_SOURCE_ID,
-  upsertBuildingHighlightLayer,
+  querySelectableBuildingsInView,
+  updateHoverBuildingLayer,
+  updateSelectableBuildingsLayer,
+  updateSelectedBuildingLayer,
 } from "../lib/buildingSelection";
 import { FALLBACK_MAP_VIEW, getInitialMapView } from "../lib/mapGeolocation";
 import { ensureMapLibreWorker } from "../lib/maplibreSetup";
@@ -22,13 +22,22 @@ import type { LocationPinResponse, MapStateResponse, SelectedBuilding } from "..
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const GROUP_PINS_SOURCE_ID = "group-pins";
 const GROUP_PINS_LAYER_ID = "group-pins-layer";
+const SELECTION_PITCH = 0;
+const CAMERA_ANIMATION_MS = 500;
+
+type SavedCamera = {
+  pitch: number;
+  bearing: number;
+};
 
 type WorldMapVariant = "landing" | "workspace";
+
+export type BuildingSelectionPhase = "off" | "choosing" | "chosen";
 
 type WorldMapProps = {
   variant?: WorldMapVariant;
   mapState?: MapStateResponse | null;
-  contributeMode?: boolean;
+  buildingSelectionPhase?: BuildingSelectionPhase;
   selectedBuilding?: SelectedBuilding | null;
   onBuildingSelect?: (building: SelectedBuilding) => void;
   onMissedBuildingClick?: () => void;
@@ -102,28 +111,36 @@ function fitMapToPins(
 export function WorldMap({
   variant = "landing",
   mapState = null,
-  contributeMode = false,
+  buildingSelectionPhase = "off",
   selectedBuilding = null,
   onBuildingSelect,
   onMissedBuildingClick,
 }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const mapReadyRef = useRef(false);
+  const [mapReady, setMapReady] = useState(false);
   const mapStateRef = useRef(mapState);
-  const contributeModeRef = useRef(contributeMode);
+  const buildingSelectionPhaseRef = useRef(buildingSelectionPhase);
   const selectedBuildingRef = useRef(selectedBuilding);
   const onBuildingSelectRef = useRef(onBuildingSelect);
   const onMissedBuildingClickRef = useRef(onMissedBuildingClick);
   const hoveredBuildingRef = useRef<SelectedBuilding | null>(null);
+  const selectableBuildingsRef = useRef<SelectedBuilding[]>([]);
+  const savedCameraRef = useRef<SavedCamera | null>(null);
+  const refreshSelectableBuildingsRef = useRef<(map: maplibregl.Map) => void>(
+    () => undefined,
+  );
+  const syncBuildingSelectionVisualsRef = useRef<
+    (map: maplibregl.Map, phase: BuildingSelectionPhase, building: SelectedBuilding | null) => void
+  >(() => undefined);
 
   useEffect(() => {
     mapStateRef.current = mapState;
   }, [mapState]);
 
   useEffect(() => {
-    contributeModeRef.current = contributeMode;
-  }, [contributeMode]);
+    buildingSelectionPhaseRef.current = buildingSelectionPhase;
+  }, [buildingSelectionPhase]);
 
   useEffect(() => {
     selectedBuildingRef.current = selectedBuilding;
@@ -137,6 +154,92 @@ export function WorldMap({
     onMissedBuildingClickRef.current = onMissedBuildingClick;
   }, [onMissedBuildingClick]);
 
+  const refreshSelectableBuildings = useCallback((map: maplibregl.Map) => {
+    if (buildingSelectionPhaseRef.current !== "choosing") {
+      return;
+    }
+
+    const buildings = querySelectableBuildingsInView(map);
+    selectableBuildingsRef.current = buildings;
+    updateSelectableBuildingsLayer(
+      map,
+      buildings,
+      hoveredBuildingRef.current?.selectionKey ?? null,
+    );
+  }, []);
+
+  refreshSelectableBuildingsRef.current = refreshSelectableBuildings;
+
+  const applySelectionCamera = useCallback(
+    (map: maplibregl.Map, phase: BuildingSelectionPhase) => {
+      if (phase === "off") {
+        const saved = savedCameraRef.current;
+        if (!saved) {
+          return;
+        }
+
+        map.easeTo({
+          pitch: saved.pitch,
+          bearing: saved.bearing,
+          duration: CAMERA_ANIMATION_MS,
+          essential: true,
+        });
+        savedCameraRef.current = null;
+        return;
+      }
+
+      if (phase === "choosing" && savedCameraRef.current == null) {
+        savedCameraRef.current = {
+          pitch: map.getPitch(),
+          bearing: map.getBearing(),
+        };
+      }
+
+      if (map.getPitch() > 1) {
+        map.easeTo({
+          pitch: SELECTION_PITCH,
+          duration: CAMERA_ANIMATION_MS,
+          essential: true,
+        });
+      }
+    },
+    [],
+  );
+
+  const syncBuildingSelectionVisuals = useCallback(
+    (
+      map: maplibregl.Map,
+      phase: BuildingSelectionPhase,
+      building: SelectedBuilding | null,
+    ) => {
+      hoveredBuildingRef.current = null;
+      map.getCanvas().style.cursor = "";
+
+      if (phase === "off") {
+        clearAllBuildingHighlightLayers(map);
+        selectableBuildingsRef.current = [];
+        return;
+      }
+
+      if (phase === "choosing") {
+        updateHoverBuildingLayer(map, null);
+        updateSelectedBuildingLayer(map, null);
+        refreshSelectableBuildings(map);
+        return;
+      }
+
+      if (phase === "chosen") {
+        updateSelectableBuildingsLayer(map, [], null);
+        updateHoverBuildingLayer(map, null);
+        updateSelectedBuildingLayer(map, building);
+        selectableBuildingsRef.current = [];
+      }
+    },
+    [refreshSelectableBuildings],
+  );
+
+  syncBuildingSelectionVisualsRef.current = syncBuildingSelectionVisuals;
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) {
@@ -146,7 +249,7 @@ export function WorldMap({
     ensureMapLibreWorker();
 
     let disposed = false;
-    mapReadyRef.current = false;
+    setMapReady(false);
 
     const map = new maplibregl.Map({
       container,
@@ -160,8 +263,29 @@ export function WorldMap({
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+    let refreshTimer: number | undefined;
+
+    const scheduleSelectableRefresh = () => {
+      if (buildingSelectionPhaseRef.current !== "choosing") {
+        return;
+      }
+
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        refreshSelectableBuildingsRef.current(map);
+      }, 150);
+    };
+
+    const handleSourceData = (event: maplibregl.MapSourceDataEvent) => {
+      if (event.sourceId !== OPENMAPTILES_SOURCE_ID || !event.isSourceLoaded) {
+        return;
+      }
+
+      scheduleSelectableRefresh();
+    };
+
     const handleClick = (event: maplibregl.MapMouseEvent) => {
-      if (!contributeModeRef.current) {
+      if (buildingSelectionPhaseRef.current !== "choosing") {
         return;
       }
 
@@ -175,16 +299,8 @@ export function WorldMap({
     };
 
     const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
-      if (!contributeModeRef.current) {
+      if (buildingSelectionPhaseRef.current !== "choosing") {
         map.getCanvas().style.cursor = "";
-        if (hoveredBuildingRef.current) {
-          hoveredBuildingRef.current = null;
-          clearBuildingHighlightLayer(
-            map,
-            HOVER_BUILDING_SOURCE_ID,
-            HOVER_BUILDING_LAYER_ID,
-          );
-        }
         return;
       }
 
@@ -192,18 +308,14 @@ export function WorldMap({
       if (building) {
         map.getCanvas().style.cursor = "pointer";
         if (
-          hoveredBuildingRef.current?.osmBuildingId !== building.osmBuildingId
+          hoveredBuildingRef.current?.selectionKey !== building.selectionKey
         ) {
           hoveredBuildingRef.current = building;
-          upsertBuildingHighlightLayer(
+          updateHoverBuildingLayer(map, building);
+          updateSelectableBuildingsLayer(
             map,
-            HOVER_BUILDING_SOURCE_ID,
-            HOVER_BUILDING_LAYER_ID,
-            building,
-            {
-              "fill-color": "#60a5fa",
-              "fill-opacity": 0.35,
-            },
+            selectableBuildingsRef.current,
+            building.selectionKey,
           );
         }
         return;
@@ -212,10 +324,11 @@ export function WorldMap({
       map.getCanvas().style.cursor = "";
       if (hoveredBuildingRef.current) {
         hoveredBuildingRef.current = null;
-        clearBuildingHighlightLayer(
+        updateHoverBuildingLayer(map, null);
+        updateSelectableBuildingsLayer(
           map,
-          HOVER_BUILDING_SOURCE_ID,
-          HOVER_BUILDING_LAYER_ID,
+          selectableBuildingsRef.current,
+          null,
         );
       }
     };
@@ -232,12 +345,21 @@ export function WorldMap({
       }
 
       updateGroupPinLayer(map, mapStateRef.current);
-      mapReadyRef.current = true;
+      setMapReady(true);
       map.resize();
+
+      syncBuildingSelectionVisualsRef.current(
+        map,
+        buildingSelectionPhaseRef.current,
+        selectedBuildingRef.current,
+      );
     });
 
     map.on("click", handleClick);
     map.on("mousemove", handleMouseMove);
+    map.on("moveend", scheduleSelectableRefresh);
+    map.on("zoomend", scheduleSelectableRefresh);
+    map.on("sourcedata", handleSourceData);
 
     map.on("error", (event) => {
       console.error("MapLibre error:", event.error);
@@ -262,18 +384,22 @@ export function WorldMap({
 
     return () => {
       disposed = true;
-      mapReadyRef.current = false;
+      setMapReady(false);
       mapRef.current = null;
+      window.clearTimeout(refreshTimer);
       resizeObserver.disconnect();
       map.off("click", handleClick);
       map.off("mousemove", handleMouseMove);
+      map.off("moveend", scheduleSelectableRefresh);
+      map.off("zoomend", scheduleSelectableRefresh);
+      map.off("sourcedata", handleSourceData);
       map.remove();
     };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReadyRef.current) {
+    if (!map || !mapReady) {
       return;
     }
 
@@ -282,52 +408,23 @@ export function WorldMap({
     if (variant === "workspace" && mapState?.pins?.length) {
       fitMapToPins(map, mapState.pins);
     }
-  }, [mapState, variant]);
+  }, [mapState, variant, mapReady]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mapReadyRef.current) {
+    if (!map || !mapReady) {
       return;
     }
 
-    if (!contributeMode) {
-      map.getCanvas().style.cursor = "";
-      hoveredBuildingRef.current = null;
-      clearBuildingHighlightLayer(
-        map,
-        HOVER_BUILDING_SOURCE_ID,
-        HOVER_BUILDING_LAYER_ID,
-      );
-    }
-  }, [contributeMode]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mapReadyRef.current) {
-      return;
-    }
-
-    if (selectedBuilding) {
-      upsertBuildingHighlightLayer(
-        map,
-        SELECTED_BUILDING_SOURCE_ID,
-        SELECTED_BUILDING_LAYER_ID,
-        selectedBuilding,
-        {
-          "fill-color": "#4f46e5",
-          "fill-opacity": 0.45,
-          "fill-outline-color": "#312e81",
-        },
-      );
-      return;
-    }
-
-    clearBuildingHighlightLayer(
-      map,
-      SELECTED_BUILDING_SOURCE_ID,
-      SELECTED_BUILDING_LAYER_ID,
-    );
-  }, [selectedBuilding]);
+    applySelectionCamera(map, buildingSelectionPhase);
+    syncBuildingSelectionVisuals(map, buildingSelectionPhase, selectedBuilding);
+  }, [
+    buildingSelectionPhase,
+    selectedBuilding,
+    mapReady,
+    applySelectionCamera,
+    syncBuildingSelectionVisuals,
+  ]);
 
   return (
     <div className="relative h-full w-full">

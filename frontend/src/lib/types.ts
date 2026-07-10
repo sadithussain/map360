@@ -66,13 +66,29 @@ export type LocationPinCreate = {
   label?: string | null;
 };
 
+/** How a building's {@link SelectedBuilding.selectionKey} was derived. */
+export type BuildingIdentityStrategy = "osm" | "feature" | "geometry";
+
 export type SelectedBuilding = {
-  osmBuildingId: number;
+  /**
+   * Real OSM building id when the tile exposes one (osm_id property or a
+   * numeric feature id), otherwise null. Null buildings can still be
+   * highlighted, but cannot be persisted as a pin.
+   */
+  osmBuildingId: number | null;
   geometry: Polygon | MultiPolygon;
   centroid: {
     lat: number;
     lng: number;
   };
+  /**
+   * Guaranteed-unique per-footprint key for hover/selection UI. Always
+   * incorporates a geometry hash so buildings that share (or lack) an osm_id
+   * never collapse into a single highlight.
+   */
+  selectionKey: string;
+  /** Which identifier the selectionKey was derived from (diagnostics/persistence). */
+  identityStrategy: BuildingIdentityStrategy;
 };
 
 export type CaptureMethod = "images" | "video";

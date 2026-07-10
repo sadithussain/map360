@@ -81,6 +81,13 @@ function AppShell() {
       return;
     }
 
+    if (selectedBuilding.osmBuildingId == null) {
+      setSelectionError(
+        "This building footprint has no OpenStreetMap id, so it cannot be saved as a pin yet. Please pick another building.",
+      );
+      return;
+    }
+
     setIsCreatingPin(true);
     setSelectionError("");
 
@@ -125,7 +132,13 @@ function AppShell() {
     return null;
   }
 
-  const contributeMode = contributionStep === "selecting";
+  const buildingSelectionPhase =
+    contributionStep === "selecting"
+      ? "choosing"
+      : contributionStep === "confirming"
+        ? "chosen"
+        : "off";
+
   const showEmptyState =
     !isMapStateLoading &&
     !mapStateError &&
@@ -161,7 +174,7 @@ function AppShell() {
         )}
       </div>
 
-      {contributeMode && (
+      {buildingSelectionPhase === "choosing" && (
         <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-center px-4">
           <p className="rounded-md bg-white/95 px-3 py-1.5 text-sm text-gray-700 shadow-sm">
             {missedClickHint || "Click a building to scan it."}
@@ -184,10 +197,8 @@ function AppShell() {
       <WorldMap
         variant="workspace"
         mapState={mapState}
-        contributeMode={contributeMode}
-        selectedBuilding={
-          contributionStep === "confirming" ? selectedBuilding : null
-        }
+        buildingSelectionPhase={buildingSelectionPhase}
+        selectedBuilding={selectedBuilding}
         onBuildingSelect={handleBuildingSelect}
         onMissedBuildingClick={handleMissedBuildingClick}
       />
