@@ -1,9 +1,24 @@
-import type { Map } from "maplibre-gl";
+import type { ExpressionSpecification, Map } from "maplibre-gl";
 
 import {
   ensureBuildingHighlightAnchorLayer,
   ensureBuildingPickerLayer,
 } from "./buildingSelection";
+
+// Some OpenMapTiles building features have null/missing render_height or
+// render_min_height. Coalescing to 0 avoids MapLibre's worker throwing
+// "Expected value to be of type number, but found null instead".
+const EXTRUSION_HEIGHT: ExpressionSpecification = [
+  "coalesce",
+  ["to-number", ["get", "render_height"]],
+  0,
+];
+
+const EXTRUSION_BASE: ExpressionSpecification = [
+  "coalesce",
+  ["to-number", ["get", "render_min_height"]],
+  0,
+];
 
 function setPaintIfExists(
   map: Map,
@@ -121,6 +136,8 @@ export function applyGreyMapStyle(map: Map): void {
   if (map.getLayer("building-3d")) {
     setPaintIfExists(map, "building-3d", "fill-extrusion-color", "#b8b8b8");
     setPaintIfExists(map, "building-3d", "fill-extrusion-opacity", 0.85);
+    setPaintIfExists(map, "building-3d", "fill-extrusion-height", EXTRUSION_HEIGHT);
+    setPaintIfExists(map, "building-3d", "fill-extrusion-base", EXTRUSION_BASE);
   } else {
     map.addLayer({
       id: "grey-3d-buildings",
@@ -131,8 +148,8 @@ export function applyGreyMapStyle(map: Map): void {
       minzoom: 14,
       paint: {
         "fill-extrusion-color": "#b8b8b8",
-        "fill-extrusion-height": ["get", "render_height"],
-        "fill-extrusion-base": ["get", "render_min_height"],
+        "fill-extrusion-height": EXTRUSION_HEIGHT,
+        "fill-extrusion-base": EXTRUSION_BASE,
         "fill-extrusion-opacity": 0.85,
       },
     });

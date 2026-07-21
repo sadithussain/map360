@@ -9,8 +9,10 @@ from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
 from app.models.group_model import Group, Membership
+from app.models.location_pin_model import LocationPin
 from app.models.user_model import User
 from app.schemas.map_schema import MapStateResponse
+from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_state as get_map_state_service
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
@@ -33,6 +35,36 @@ def _make_group(owner_id) -> Group:
     group.id = uuid4()
     group.created_at = datetime.now(UTC)
     return group
+
+
+def _make_pin(group_id, user_id) -> LocationPin:
+    pin = LocationPin(
+        group_id=group_id,
+        user_id=user_id,
+        osm_building_id=123,
+        lat=40.5,
+        lng=-73.9,
+        building_geometry={"type": "Polygon", "coordinates": [[[0, 0]]]},
+        label=None,
+    )
+    pin.id = uuid4()
+    pin.created_at = datetime.now(UTC)
+    return pin
+
+
+def _pass_membership(monkeypatch, group) -> Membership:
+    membership = Membership(
+        user_id=group.owner_id, group_id=group.id, role="owner"
+    )
+    monkeypatch.setattr(
+        "app.services.map_service.get_group_by_id",
+        AsyncMock(return_value=group),
+    )
+    monkeypatch.setattr(
+        "app.services.map_service.get_membership_crud",
+        AsyncMock(return_value=membership),
+    )
+    return membership
 
 
 @pytest.mark.asyncio
@@ -92,7 +124,7 @@ async def test_service_returns_empty_default_for_member(monkeypatch) -> None:
         AsyncMock(return_value=membership),
     )
     monkeypatch.setattr(
-        "app.services.map_service.list_location_pins_for_group",
+        "app.services.map_service.list_rendered_location_pins_for_group",
         AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
@@ -103,6 +135,100 @@ async def test_service_returns_empty_default_for_member(monkeypatch) -> None:
     result = await get_map_state_service(AsyncMock(), group.id, user)
 
     assert result == MapStateResponse(group_id=group.id, pins=[], objects=[])
+
+
+@pytest.mark.asyncio
+async def test_map_state_returns_only_rendered_pins(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    rendered_pin = _make_pin(group.id, user.id)
+    # The service relies on ``list_rendered_location_pins_for_group`` (which
+    # filters to pins that have a map object) rather than every pin.
+    rendered_mock = AsyncMock(return_value=[rendered_pin])
+    monkeypatch.setattr(
+        "app.services.map_service.list_rendered_location_pins_for_group",
+        rendered_mock,
+    )
+    monkeypatch.setattr(
+        "app.services.map_service.list_map_objects_for_group",
+        AsyncMock(return_value=[]),
+    )
+
+    result = await get_map_state_service(AsyncMock(), group.id, user)
+
+    rendered_mock.assert_awaited_once()
+    assert [pin.id for pin in result.pins] == [rendered_pin.id]
+
+
+@pytest.mark.asyncio
+async def test_delete_pin_rejects_non_member(monkeypatch) -> None:
+    user = _make_user("outsider")
+    group = _make_group(uuid4())
+
+    monkeypatch.setattr(
+        "app.services.map_service.get_group_by_id",
+        AsyncMock(return_value=group),
+    )
+    monkeypatch.setattr(
+        "app.services.map_service.get_membership_crud",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_location_pin_service(AsyncMock(), group.id, uuid4(), user)
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_delete_pin_404_when_missing_or_other_group(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    # Pin belongs to a different group, so it must not be deletable here.
+    other_group_pin = _make_pin(uuid4(), user.id)
+    monkeypatch.setattr(
+        "app.services.map_service.get_location_pin_crud",
+        AsyncMock(return_value=other_group_pin),
+    )
+    delete_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.map_service.delete_location_pin_crud", delete_mock
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_location_pin_service(
+            AsyncMock(), group.id, other_group_pin.id, user
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+    delete_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_pin_success_calls_crud_and_commits(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    pin = _make_pin(group.id, user.id)
+    monkeypatch.setattr(
+        "app.services.map_service.get_location_pin_crud",
+        AsyncMock(return_value=pin),
+    )
+    delete_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.map_service.delete_location_pin_crud", delete_mock
+    )
+
+    db = AsyncMock()
+    await delete_location_pin_service(db, group.id, pin.id, user)
+
+    delete_mock.assert_awaited_once()
+    db.commit.assert_awaited_once()
 
 
 def test_get_map_state_endpoint_returns_empty_state(monkeypatch) -> None:
@@ -144,3 +270,33 @@ def test_map_state_route_is_registered() -> None:
 
     assert "/groups/{group_id}/map-state" in paths
     assert "/groups/{group_id}/pins" in paths
+    assert "/groups/{group_id}/pins/{pin_id}" in paths
+
+
+def test_delete_pin_endpoint_returns_204(monkeypatch) -> None:
+    requester = _make_user("requester")
+    group_id = uuid4()
+    pin_id = uuid4()
+
+    service_mock = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        "app.routers.map_router.delete_location_pin_service", service_mock
+    )
+
+    async def _override_get_db():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_authenticated_user] = lambda: requester
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        client = TestClient(app)
+        response = client.delete(f"/groups/{group_id}/pins/{pin_id}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 204
+    service_mock.assert_awaited_once()
+    _, awaited_group_id, awaited_pin_id, awaited_user = service_mock.await_args.args
+    assert awaited_group_id == group_id
+    assert awaited_pin_id == pin_id
+    assert awaited_user is requester

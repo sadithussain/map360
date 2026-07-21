@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from app.models.location_pin_model import LocationPin
+from app.models.map_object_model import MapObject
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,3 +46,46 @@ async def list_location_pins_for_group(
         .order_by(LocationPin.created_at.asc())
     )
     return list(result.scalars().all())
+
+
+async def list_rendered_location_pins_for_group(
+    db: AsyncSession,
+    group_id: UUID,
+) -> list[LocationPin]:
+    """Return only pins that have a successful 3D render (a map object).
+
+    Pins are created alongside an image upload but should stay hidden from the
+    map until TRELLIS produces a ``MapObject``. Pins that are still processing,
+    failed, or never uploaded are excluded.
+    """
+    has_map_object = (
+        select(MapObject.id)
+        .where(MapObject.pin_id == LocationPin.id)
+        .exists()
+    )
+    result = await db.execute(
+        select(LocationPin)
+        .where(LocationPin.group_id == group_id, has_map_object)
+        .order_by(LocationPin.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def get_location_pin(
+    db: AsyncSession,
+    pin_id: UUID,
+) -> LocationPin | None:
+    """Return a location pin by id, or ``None`` if it does not exist."""
+    result = await db.execute(
+        select(LocationPin).where(LocationPin.id == pin_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def delete_location_pin(
+    db: AsyncSession,
+    pin: LocationPin,
+) -> None:
+    """Delete a pin via the ORM so submissions/objects cascade-delete."""
+    await db.delete(pin)
+    await db.flush()

@@ -10,6 +10,7 @@ import {
   ApiError,
   createGeneration,
   createLocationPin,
+  deleteLocationPin,
   getGeneration,
 } from "../lib/api";
 import { isEmptyMapState } from "../lib/mapState";
@@ -41,9 +42,7 @@ function AppShell() {
   const [selectedBuilding, setSelectedBuilding] =
     useState<SelectedBuilding | null>(null);
   const [pinLabel, setPinLabel] = useState("");
-  const [createdPin, setCreatedPin] = useState<LocationPinResponse | null>(null);
   const [selectionError, setSelectionError] = useState("");
-  const [isCreatingPin, setIsCreatingPin] = useState(false);
   const [missedClickHint, setMissedClickHint] = useState("");
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -53,9 +52,7 @@ function AppShell() {
     setContributionStep("idle");
     setSelectedBuilding(null);
     setPinLabel("");
-    setCreatedPin(null);
     setSelectionError("");
-    setIsCreatingPin(false);
     setMissedClickHint("");
     setSubmission(null);
     setIsUploading(false);
@@ -88,8 +85,8 @@ function AppShell() {
     setMissedClickHint("Click a building on the map to scan it.");
   };
 
-  const handleCreatePin = async () => {
-    if (!activeGroupId || !selectedBuilding) {
+  const handleContinueToCapture = () => {
+    if (!selectedBuilding) {
       return;
     }
 
@@ -100,54 +97,54 @@ function AppShell() {
       return;
     }
 
-    setIsCreatingPin(true);
     setSelectionError("");
-
-    try {
-      const pin = await createLocationPin(activeGroupId, {
-        osm_building_id: selectedBuilding.osmBuildingId,
-        lat: selectedBuilding.centroid.lat,
-        lng: selectedBuilding.centroid.lng,
-        building_geometry: selectedBuilding.geometry,
-        label: pinLabel.trim() || null,
-      });
-
-      const refreshed = await refreshMapState();
-      if (refreshed) {
-        setCachedMapState(activeGroupId, refreshed);
-      } else if (mapState) {
-        setCachedMapState(activeGroupId, {
-          ...mapState,
-          pins: [...mapState.pins, pin],
-        });
-      }
-
-      setCreatedPin(pin);
-      setContributionStep("capturing");
-    } catch (error: unknown) {
-      if (error instanceof ApiError) {
-        setSelectionError(error.message);
-      } else {
-        setSelectionError("Unable to create location pin.");
-      }
-    } finally {
-      setIsCreatingPin(false);
-    }
+    setContributionStep("capturing");
   };
 
   const handleCaptureSubmit = async (image: File) => {
-    if (!activeGroupId || !createdPin) {
+    if (
+      !activeGroupId ||
+      !selectedBuilding ||
+      selectedBuilding.osmBuildingId == null
+    ) {
       return;
     }
 
     setIsUploading(true);
     setUploadError("");
 
+    // The pin is created only now, alongside the upload, so canceling before
+    // this point never leaves an empty pin behind.
+    let pin: LocationPinResponse;
     try {
-      const created = await createGeneration(activeGroupId, createdPin.id, image);
+      pin = await createLocationPin(activeGroupId, {
+        osm_building_id: selectedBuilding.osmBuildingId,
+        lat: selectedBuilding.centroid.lat,
+        lng: selectedBuilding.centroid.lng,
+        building_geometry: selectedBuilding.geometry,
+        label: pinLabel.trim() || null,
+      });
+    } catch (error: unknown) {
+      setUploadError(
+        error instanceof ApiError
+          ? error.message
+          : "Unable to create location pin.",
+      );
+      setIsUploading(false);
+      return;
+    }
+
+    try {
+      const created = await createGeneration(activeGroupId, pin.id, image);
       setSubmission(created);
       setContributionStep("processing");
     } catch (error: unknown) {
+      // Roll back the just-created pin so a failed upload leaves nothing.
+      try {
+        await deleteLocationPin(activeGroupId, pin.id);
+      } catch {
+        // Best-effort cleanup; the backend also prunes orphan pins.
+      }
       if (error instanceof ApiError) {
         setUploadError(error.message);
       } else {
@@ -187,6 +184,13 @@ function AppShell() {
         } else if (latest.status === "failed") {
           setSubmission(latest);
           setContributionStep("failed");
+          // The render failed, so the pin has no 3D model; remove it (the
+          // error message is already captured in `latest` for display).
+          try {
+            await deleteLocationPin(activeGroupId, latest.pin_id);
+          } catch {
+            // Best-effort cleanup; the orphan stays hidden from the map.
+          }
         }
       } catch {
         // Transient errors (e.g. Colab waking up) are ignored; keep polling.
@@ -281,18 +285,17 @@ function AppShell() {
         <BuildingSelectionPanel
           building={selectedBuilding}
           label={pinLabel}
-          isSubmitting={isCreatingPin}
           error={selectionError}
           onLabelChange={setPinLabel}
-          onContinue={() => void handleCreatePin()}
+          onContinue={handleContinueToCapture}
           onPickAnother={handlePickAnotherBuilding}
           onCancel={resetContributionFlow}
         />
       )}
 
-      {contributionStep === "capturing" && createdPin && (
+      {contributionStep === "capturing" && selectedBuilding && (
         <ContributionCapturePanel
-          pin={createdPin}
+          building={selectedBuilding}
           isSubmitting={isUploading}
           error={uploadError}
           onSubmit={(image) => void handleCaptureSubmit(image)}
@@ -348,7 +351,7 @@ function AppShell() {
               "Something went wrong while generating the 3D model. Please try again."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            {createdPin && (
+            {selectedBuilding && (
               <button
                 type="button"
                 onClick={() => {

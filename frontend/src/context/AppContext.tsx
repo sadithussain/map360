@@ -32,6 +32,8 @@ import type { GroupResponse, UserResponse } from "../lib/types";
 
 type AppContextValue = {
   user: UserResponse | null;
+  /** True when a JWT is present in localStorage (session may still be loading). */
+  hasToken: boolean;
   groups: GroupResponse[];
   activeGroupId: string | null;
   activeGroup: GroupResponse | null;
@@ -200,6 +202,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       user,
+      hasToken,
       groups,
       activeGroupId,
       activeGroup,
@@ -213,6 +216,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       user,
+      hasToken,
       groups,
       activeGroupId,
       activeGroup,

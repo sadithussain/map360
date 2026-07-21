@@ -263,6 +263,23 @@ export function WorldMap({
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+    // The OpenFreeMap Liberty style references POI icons (e.g. "office",
+    // "gate", "atm") that are absent from its sprite sheet. We hide those POI
+    // layers in the grey style, but MapLibre still requests the icons on first
+    // paint. Register a transparent 1x1 placeholder for any missing image to
+    // avoid noisy "Image could not be loaded" console errors.
+    const handleStyleImageMissing = (event: { id: string }) => {
+      if (map.hasImage(event.id)) {
+        return;
+      }
+      map.addImage(event.id, {
+        width: 1,
+        height: 1,
+        data: new Uint8Array(4),
+      });
+    };
+    map.on("styleimagemissing", handleStyleImageMissing);
+
     let refreshTimer: number | undefined;
 
     const scheduleSelectableRefresh = () => {
@@ -393,6 +410,7 @@ export function WorldMap({
       map.off("moveend", scheduleSelectableRefresh);
       map.off("zoomend", scheduleSelectableRefresh);
       map.off("sourcedata", handleSourceData);
+      map.off("styleimagemissing", handleStyleImageMissing);
       map.remove();
     };
   }, []);

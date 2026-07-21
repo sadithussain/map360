@@ -3,8 +3,10 @@ import { useApp } from "../context/AppContext";
 import GroupSwitcher from "./GroupSwitcher";
 
 function Navbar() {
-  const { user, activeGroup, logout } = useApp();
-  const loggedIn = user !== null;
+  const { user, hasToken, isBootstrapping, activeGroup, logout } = useApp();
+  // Key off the JWT session, not just a loaded profile — otherwise a stalled
+  // /users/me call shows Register/Login while route guards still treat us as logged in.
+  const loggedIn = hasToken;
 
   return (
     <nav className="flex items-center justify-between px-6 py-4 shadow-md">
@@ -18,7 +20,7 @@ function Navbar() {
         {loggedIn ? (
           <>
             <li className="hidden text-sm text-gray-600 sm:block">
-              {user.username}
+              {user?.username ?? (isBootstrapping ? "Loading…" : "Account")}
             </li>
             <li>
               <GroupSwitcher />

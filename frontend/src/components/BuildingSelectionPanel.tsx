@@ -3,7 +3,6 @@ import type { SelectedBuilding } from "../lib/types";
 type BuildingSelectionPanelProps = {
   building: SelectedBuilding;
   label: string;
-  isSubmitting: boolean;
   error: string;
   onLabelChange: (value: string) => void;
   onContinue: () => void;
@@ -14,7 +13,6 @@ type BuildingSelectionPanelProps = {
 function BuildingSelectionPanel({
   building,
   label,
-  isSubmitting,
   error,
   onLabelChange,
   onContinue,
@@ -51,24 +49,21 @@ function BuildingSelectionPanel({
         <button
           type="button"
           onClick={onContinue}
-          disabled={isSubmitting}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
         >
-          {isSubmitting ? "Creating pin..." : "Continue to capture"}
+          Continue to capture
         </button>
         <button
           type="button"
           onClick={onPickAnother}
-          disabled={isSubmitting}
-          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
         >
           Pick another building
         </button>
         <button
           type="button"
           onClick={onCancel}
-          disabled={isSubmitting}
-          className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 transition hover:text-gray-900"
         >
           Cancel
         </button>

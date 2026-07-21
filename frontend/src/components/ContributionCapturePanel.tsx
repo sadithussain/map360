@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 import { validateImageFile } from "../lib/captureValidation";
-import type { LocationPinResponse } from "../lib/types";
+import type { SelectedBuilding } from "../lib/types";
 
 type ContributionCapturePanelProps = {
-  pin: LocationPinResponse;
+  building: SelectedBuilding;
   isSubmitting: boolean;
   error: string;
   onSubmit: (image: File) => void;
@@ -12,7 +12,7 @@ type ContributionCapturePanelProps = {
 };
 
 function ContributionCapturePanel({
-  pin,
+  building,
   isSubmitting,
   error,
   onSubmit,
@@ -38,8 +38,11 @@ function ContributionCapturePanel({
     <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-20 mx-auto max-w-lg rounded-lg bg-white p-5 shadow-lg sm:left-auto sm:right-4">
       <h2 className="text-lg font-semibold text-gray-900">Capture a photo</h2>
       <p className="mt-1 text-sm text-gray-600">
-        Pin created for building #{pin.osm_building_id}. Upload one clear photo
-        and we&apos;ll generate a 3D model of it.
+        {building.osmBuildingId != null
+          ? `Building #${building.osmBuildingId}. `
+          : ""}
+        Upload one clear photo and we&apos;ll generate a 3D model. The pin
+        appears on the map once the 3D model is ready.
       </p>
 
       <label className="mt-4 block rounded-md border border-dashed border-gray-300 p-3 text-sm">

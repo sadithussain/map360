@@ -8,7 +8,13 @@ from app.crud.location_pin_crud import (
     create_location_pin as create_location_pin_crud,
 )
 from app.crud.location_pin_crud import (
-    list_location_pins_for_group,
+    delete_location_pin as delete_location_pin_crud,
+)
+from app.crud.location_pin_crud import (
+    get_location_pin as get_location_pin_crud,
+)
+from app.crud.location_pin_crud import (
+    list_rendered_location_pins_for_group,
 )
 from app.models.location_pin_model import LocationPin
 from app.models.user_model import User
@@ -91,7 +97,7 @@ async def get_map_state(
     """Return the map state for a group the authenticated user belongs to."""
     await _require_group_membership(db, group_id, current_user)
 
-    pins = await list_location_pins_for_group(db, group_id)
+    pins = await list_rendered_location_pins_for_group(db, group_id)
     map_objects = await list_map_objects_for_group(db, group_id)
     return MapStateResponse(
         group_id=group_id,
@@ -132,3 +138,27 @@ async def create_location_pin(
     await db.commit()
     await db.refresh(pin)
     return _pin_to_response(pin)
+
+
+async def delete_location_pin(
+    db: AsyncSession,
+    group_id: UUID,
+    pin_id: UUID,
+    current_user: User,
+) -> None:
+    """Delete a pin (and its submissions/objects) from a group.
+
+    Used to roll back a pin whose upload never started a generation, so empty
+    pins are never left behind. Enforces group membership and pin scope.
+    """
+    await _require_group_membership(db, group_id, current_user)
+
+    pin = await get_location_pin_crud(db, pin_id)
+    if pin is None or pin.group_id != group_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location pin not found in this group.",
+        )
+
+    await delete_location_pin_crud(db, pin)
+    await db.commit()

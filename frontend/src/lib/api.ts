@@ -152,6 +152,16 @@ export function createLocationPin(
   });
 }
 
+/** Delete a location pin (and its submissions/objects) from a group. */
+export function deleteLocationPin(
+  groupId: string,
+  pinId: string,
+): Promise<void> {
+  return apiFetch<void>(`/groups/${groupId}/pins/${pinId}`, {
+    method: "DELETE",
+  });
+}
+
 /** Upload one photo and start async TRELLIS mesh generation for a pin. */
 export function createGeneration(
   groupId: string,

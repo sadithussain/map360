@@ -18,8 +18,9 @@ from app.services.generation_service import (
     get_generation_submission as get_generation_submission_service,
 )
 from app.services.map_service import create_location_pin as create_location_pin_service
+from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_state as get_map_state_service
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["maps"])
@@ -52,6 +53,22 @@ async def create_location_pin(
 ) -> LocationPinResponse:
     """Create a location pin from a selected base-map building."""
     return await create_location_pin_service(db, group_id, current_user, payload)
+
+
+@router.delete(
+    "/groups/{group_id}/pins/{pin_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+async def delete_location_pin(
+    group_id: UUID,
+    pin_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Delete a location pin and its submissions/objects from a group."""
+    await delete_location_pin_service(db, group_id, pin_id, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
