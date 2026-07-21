@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import BuildingSelectionPanel from "../components/BuildingSelectionPanel";
 import ContributionCapturePanel from "../components/ContributionCapturePanel";
@@ -6,24 +6,33 @@ import EmptyGroupMapState from "../components/EmptyGroupMapState";
 import { WorldMap } from "../components/WorldMap";
 import { useApp } from "../context/AppContext";
 import { useGroupMapState } from "../hooks/useGroupMapState";
-import { ApiError, createLocationPin } from "../lib/api";
+import {
+  ApiError,
+  createGeneration,
+  createLocationPin,
+  getGeneration,
+} from "../lib/api";
 import { isEmptyMapState } from "../lib/mapState";
 import { setCachedMapState } from "../lib/mapStateCache";
 import type {
-  ContributionSubmissionDraft,
   LocationPinResponse,
   SelectedBuilding,
+  SubmissionResponse,
 } from "../lib/types";
+
+const GENERATION_POLL_INTERVAL_MS = 10_000;
 
 type ContributionStep =
   | "idle"
   | "selecting"
   | "confirming"
   | "capturing"
-  | "complete";
+  | "processing"
+  | "ready"
+  | "failed";
 
 function AppShell() {
-  const { activeGroupId, activeGroup, user } = useApp();
+  const { activeGroupId, activeGroup } = useApp();
   const { mapState, isMapStateLoading, mapStateError, refreshMapState } =
     useGroupMapState(activeGroupId);
 
@@ -36,8 +45,9 @@ function AppShell() {
   const [selectionError, setSelectionError] = useState("");
   const [isCreatingPin, setIsCreatingPin] = useState(false);
   const [missedClickHint, setMissedClickHint] = useState("");
-  const [completedDraft, setCompletedDraft] =
-    useState<ContributionSubmissionDraft | null>(null);
+  const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const resetContributionFlow = useCallback(() => {
     setContributionStep("idle");
@@ -47,7 +57,9 @@ function AppShell() {
     setSelectionError("");
     setIsCreatingPin(false);
     setMissedClickHint("");
-    setCompletedDraft(null);
+    setSubmission(null);
+    setIsUploading(false);
+    setUploadError("");
   }, []);
 
   const handleStartContribution = () => {
@@ -123,10 +135,70 @@ function AppShell() {
     }
   };
 
-  const handleCaptureComplete = (draft: ContributionSubmissionDraft) => {
-    setCompletedDraft(draft);
-    setContributionStep("complete");
+  const handleCaptureSubmit = async (image: File) => {
+    if (!activeGroupId || !createdPin) {
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadError("");
+
+    try {
+      const created = await createGeneration(activeGroupId, createdPin.id, image);
+      setSubmission(created);
+      setContributionStep("processing");
+    } catch (error: unknown) {
+      if (error instanceof ApiError) {
+        setUploadError(error.message);
+      } else {
+        setUploadError("Unable to start 3D generation.");
+      }
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  useEffect(() => {
+    if (
+      contributionStep !== "processing" ||
+      !activeGroupId ||
+      submission === null
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const submissionId = submission.id;
+
+    const poll = async () => {
+      try {
+        const latest = await getGeneration(activeGroupId, submissionId);
+        if (cancelled) {
+          return;
+        }
+
+        if (latest.status === "ready") {
+          setSubmission(latest);
+          setContributionStep("ready");
+          const refreshed = await refreshMapState();
+          if (!cancelled && refreshed) {
+            setCachedMapState(activeGroupId, refreshed);
+          }
+        } else if (latest.status === "failed") {
+          setSubmission(latest);
+          setContributionStep("failed");
+        }
+      } catch {
+        // Transient errors (e.g. Colab waking up) are ignored; keep polling.
+      }
+    };
+
+    const interval = window.setInterval(poll, GENERATION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [contributionStep, activeGroupId, submission, refreshMapState]);
 
   if (!activeGroupId) {
     return null;
@@ -218,27 +290,43 @@ function AppShell() {
         />
       )}
 
-      {contributionStep === "capturing" && createdPin && user && (
+      {contributionStep === "capturing" && createdPin && (
         <ContributionCapturePanel
           pin={createdPin}
-          groupId={activeGroupId}
-          userId={user.id}
-          onComplete={handleCaptureComplete}
+          isSubmitting={isUploading}
+          error={uploadError}
+          onSubmit={(image) => void handleCaptureSubmit(image)}
           onCancel={resetContributionFlow}
         />
       )}
 
-      {contributionStep === "complete" && completedDraft && (
+      {contributionStep === "processing" && (
         <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-20 mx-auto max-w-md rounded-lg bg-white p-5 shadow-lg sm:left-auto sm:right-4">
           <h2 className="text-lg font-semibold text-gray-900">
-            Submission ready
+            Generating 3D model
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            {completedDraft.captureMethod === "images"
-              ? `${completedDraft.files.length} images`
-              : "1 video"}{" "}
-            validated for building #{completedDraft.osmBuildingId}. Upload
-            wiring arrives in the next stage.
+            Your photo is being turned into a 3D model. This can take a few
+            minutes &mdash; you can keep exploring the map and it will appear
+            here when it&apos;s ready.
+          </p>
+          <button
+            type="button"
+            onClick={resetContributionFlow}
+            className="mt-4 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            Continue exploring
+          </button>
+        </div>
+      )}
+
+      {contributionStep === "ready" && (
+        <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-20 mx-auto max-w-md rounded-lg bg-white p-5 shadow-lg sm:left-auto sm:right-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            3D model ready
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Your generated model has been added to the group map.
           </p>
           <button
             type="button"
@@ -247,6 +335,40 @@ function AppShell() {
           >
             Done
           </button>
+        </div>
+      )}
+
+      {contributionStep === "failed" && (
+        <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-20 mx-auto max-w-md rounded-lg bg-white p-5 shadow-lg sm:left-auto sm:right-4">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Generation failed
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            {submission?.error_message ||
+              "Something went wrong while generating the 3D model. Please try again."}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {createdPin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmission(null);
+                  setUploadError("");
+                  setContributionStep("capturing");
+                }}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+              >
+                Try again
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={resetContributionFlow}
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Done
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -33,26 +33,22 @@ Can zoom, pan, and navigate
 Step 1: Select Location
 User selects a building footprint on the base map
 Step 2: Capture Data
-User provides one of:
-Option A: 3 images
-Left angle
-Center angle
-Right angle
- OR
-Option B: ~5 second video scan
-Horizontal sweep of storefront (left → right or right → left)
+User provides a single high-quality photo
+Clearest, most central angle of the storefront/landmark
+(Single-image capture aligns the UI with the TRELLIS single-image-to-3D backend)
 Step 3: Upload Submission
-Media is uploaded to the system
+The photo is uploaded to the system
 Associated with:
 GPS/location data
 Group ID
 User ID
 
-4.3 Processing Pipeline (Conceptual)
-System receives media
-Extracts spatial and visual information
-Generates a 3D mesh/model of the storefront
-Aligns model to correct geolocation on map
+4.3 Processing Pipeline (TRELLIS single-image-to-3D)
+FastAPI receives the photo and records a submission (status: processing)
+A background task forwards the image to the TRELLIS model (Colab Gradio) via gradio_client
+TRELLIS hallucinates and generates a complete .glb mesh of the storefront
+FastAPI uploads the .glb to Supabase Storage and marks the submission ready
+Model is aligned to the pin's real-world geolocation on the map
 
 4.4 Map Update
 Newly generated 3D object is:
@@ -100,9 +96,8 @@ User
 Group
 Membership
 Location Pin
-Media Submission (image/video)
-Generated 3D Model
-Map Object (linked model + coordinates)
+Media Submission (single source image + generation status + mesh URL)
+Map Object (linked mesh + coordinates)
 
 9. Expansion Ideas (Optional Future Layers)
 Time-based evolution of maps (historical layers)

@@ -95,6 +95,10 @@ async def test_service_returns_empty_default_for_member(monkeypatch) -> None:
         "app.services.map_service.list_location_pins_for_group",
         AsyncMock(return_value=[]),
     )
+    monkeypatch.setattr(
+        "app.services.map_service.list_map_objects_for_group",
+        AsyncMock(return_value=[]),
+    )
 
     result = await get_map_state_service(AsyncMock(), group.id, user)
 

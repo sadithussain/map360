@@ -52,8 +52,9 @@ class MapObjectResponse(BaseModel):
     pin_id: UUID
     lat: float
     lng: float
+    mesh_url: str = Field(validation_alias="mesh_public_url")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class MapStateResponse(BaseModel):
@@ -62,3 +63,21 @@ class MapStateResponse(BaseModel):
     group_id: UUID
     pins: list[LocationPinResponse] = Field(default_factory=list)
     objects: list[MapObjectResponse] = Field(default_factory=list)
+
+
+class SubmissionResponse(BaseModel):
+    """Status of a single-image 3D generation submission.
+
+    Returned when a submission is created (``202``) and when the frontend polls
+    for progress. ``mesh_url`` is populated only once ``status`` is ``ready``;
+    ``error_message`` is populated only when ``status`` is ``failed``.
+    """
+
+    id: UUID
+    pin_id: UUID
+    status: str
+    mesh_url: str | None = Field(default=None, validation_alias="mesh_public_url")
+    error_message: str | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

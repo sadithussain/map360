@@ -69,44 +69,47 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Confirmation UI after building selection (continue / pick another / cancel)
 - [x] `LocationPin` model (group, user, osm_building_id, lat, lng, building_geometry, label, created_at)
 - [x] Endpoint to create a location pin from a selected building within a group
-- [x] UI flow to choose capture method (3 images vs ~5 second video)
-- [x] Capture UI for three angled images (left / center / right)
-- [x] Capture UI for short horizontal video sweep
-- [x] Client-side validation (file size, count, duration, format)
+- [x] ~~UI flow to choose capture method (3 images vs ~5 second video)~~ Superseded by single-photo capture (TRELLIS single-image-to-3D pivot)
+- [x] ~~Capture UI for three angled images (left / center / right)~~ Superseded by single-photo capture
+- [x] ~~Capture UI for short horizontal video sweep~~ Superseded by single-photo capture
+- [ ] Single-photo capture UI (one high-quality image; camera or file input)
+- [ ] Guidance tooltip: capture the "clearest, most central angle" of the storefront
+- [ ] Client-side validation (single image, size, format)
 - [x] Attach building metadata (osm_building_id, centroid), group ID, and user ID to each submission
 
 ---
 
 ## 6. Media Upload and Submission Tracking
 
-- [ ] Define `MediaSubmission` model (pin, user, group, media type, storage keys, status)
-- [ ] Endpoint to request a signed upload URL (or accept multipart upload)
-- [ ] Endpoint to finalize a submission after upload completes
+- [ ] Define `MediaSubmission` model (pin, user, group, source image key, status, mesh keys/url, error)
+- [ ] Endpoint to accept a single-image multipart upload and start generation
+- [ ] Endpoint to poll a submission's processing status
 - [ ] Endpoint to list submissions for a pin / group
-- [ ] Track submission processing status (pending, processing, ready, failed)
-- [ ] Store original media in object storage with safe key naming
+- [ ] Track submission processing status (processing, ready, failed)
+- [ ] Store original image in Supabase Storage with safe key naming
 - [ ] Enforce per-user / per-group upload quotas (optional v1)
 
 ---
 
-## 7. 3D Processing Pipeline (Conceptual Placeholders)
+## 7. 3D Processing Pipeline
 
-- [ ] Decide on processing approach (photogrammetry service, NeRF, third-party API, etc.)
-- [ ] Define `GeneratedModel` model (submission, storage key, format, status)
-- [ ] Background worker / queue (Celery, RQ, or equivalent) for processing jobs
-- [ ] Worker job: pull media, run reconstruction, store resulting mesh
+- [x] Decide on processing approach — **TRELLIS single-image-to-3D on Colab Gradio; FastAPI middleman via `gradio_client`** (research + infra setup complete)
+- [ ] TRELLIS Gradio client helper (`gradio_client` → active `*.gradio.live` URL)
+- [ ] FastAPI `BackgroundTasks` job (image → Colab → `.glb` → Supabase Storage → DB) instead of Celery/RQ for v1
+- [ ] Background job: pass source image to TRELLIS, store resulting `.glb`
 - [ ] Align generated model to pin's real-world coordinates
-- [ ] Update submission and pin status on success / failure
-- [ ] Retry and dead-letter handling for failed jobs
+- [ ] Update submission status on success / failure (`processing` → `ready` / `failed`)
+- [ ] Retry handling for failed jobs (heavier queue such as Celery/Redis only if needed later)
 
 ---
 
 ## 8. Generated Models and Map Objects
 
-- [ ] Define `MapObject` model (group, pin, generated_model, transform/coordinates)
+- [ ] Define `MapObject` model (group, pin, submission, coordinates, `mesh_url`)
+- [ ] Include map objects (with `mesh_url`) in the group map-state response
 - [ ] Endpoint to list map objects for a group (with pagination / bounding box)
 - [ ] Endpoint to fetch a single map object with its mesh URL
-- [ ] Frontend loader for generated 3D meshes
+- [ ] Frontend loader for generated 3D meshes (Three.js / R3F `useGLTF`)
 - [ ] Real-time or near-real-time update of group map when new object is added (WebSocket / polling)
 - [ ] Visual indicator for newly added objects
 

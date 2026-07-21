@@ -21,7 +21,10 @@ class Settings(BaseSettings):
         database_url: Async SQLAlchemy URL for the Supabase Postgres database.
         supabase_url: Base URL of the Supabase project (used for storage).
         supabase_service_role_key: Server-side key for Supabase Storage access.
-        supabase_media_bucket: Storage bucket name for uploaded media.
+        supabase_media_bucket: Storage bucket name for uploaded source images.
+        supabase_mesh_bucket: Storage bucket name for generated .glb meshes.
+        trellis_gradio_url: Active Colab Gradio URL (e.g. https://<hash>.gradio.live).
+        trellis_gradio_api_name: Named Gradio endpoint to call for generation.
         jwt_secret_key: Secret used to sign application-issued JWTs.
         jwt_algorithm: Signing algorithm for JWTs.
         access_token_expire_minutes: Lifetime of issued access tokens.
@@ -40,10 +43,17 @@ class Settings(BaseSettings):
     # postgresql+asyncpg://postgres:<password>@<host>:5432/postgres
     database_url: PostgresDsn = Field(...)
 
-    # Supabase project + storage (media uploads handled later in the roadmap).
+    # Supabase project + storage. ``media`` holds uploaded source images;
+    # ``meshes`` holds the generated .glb assets returned by TRELLIS.
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     supabase_media_bucket: str = "media"
+    supabase_mesh_bucket: str = "meshes"
+
+    # TRELLIS single-image-to-3D runs on a Colab GPU behind a Gradio server.
+    # The URL is temporary and must be refreshed when the notebook restarts.
+    trellis_gradio_url: str | None = None
+    trellis_gradio_api_name: str = "/generate"
 
     # Application-owned authentication.
     jwt_secret_key: str = Field(..., min_length=16)

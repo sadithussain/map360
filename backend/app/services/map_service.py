@@ -2,9 +2,12 @@
 
 from uuid import UUID
 
+from app.crud.generation_crud import list_map_objects_for_group
 from app.crud.group_crud import get_membership as get_membership_crud
 from app.crud.location_pin_crud import (
     create_location_pin as create_location_pin_crud,
+)
+from app.crud.location_pin_crud import (
     list_location_pins_for_group,
 )
 from app.models.location_pin_model import LocationPin
@@ -12,6 +15,7 @@ from app.models.user_model import User
 from app.schemas.map_schema import (
     LocationPinCreate,
     LocationPinResponse,
+    MapObjectResponse,
     MapStateResponse,
 )
 from app.services.group_service import get_group_by_id
@@ -88,10 +92,11 @@ async def get_map_state(
     await _require_group_membership(db, group_id, current_user)
 
     pins = await list_location_pins_for_group(db, group_id)
+    map_objects = await list_map_objects_for_group(db, group_id)
     return MapStateResponse(
         group_id=group_id,
         pins=[_pin_to_response(pin) for pin in pins],
-        objects=[],
+        objects=[MapObjectResponse.model_validate(obj) for obj in map_objects],
     )
 
 

@@ -19,6 +19,10 @@ bcrypt==5.0.0
 PyJWT==2.13.0
 python-multipart==0.0.29
 
+# 3D generation pipeline: call TRELLIS on Colab Gradio and store the .glb
+gradio_client==2.5.0
+supabase==2.31.0
+
 # Tooling: linting and tests
 ruff==0.15.15
 pytest==9.0.3

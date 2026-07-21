@@ -7,6 +7,7 @@ import type {
   LocationPinResponse,
   MapStateResponse,
   MembershipResponse,
+  SubmissionResponse,
   Token,
   UserCreate,
   UserLogin,
@@ -56,10 +57,14 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const { auth = true, headers, ...rest } = options;
 
+  // Let the browser set the multipart boundary for FormData bodies; forcing
+  // application/json would corrupt file uploads.
+  const isFormData = rest.body instanceof FormData;
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(auth ? getAuthHeader() : {}),
       ...headers,
     },
@@ -145,4 +150,31 @@ export function createLocationPin(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** Upload one photo and start async TRELLIS mesh generation for a pin. */
+export function createGeneration(
+  groupId: string,
+  pinId: string,
+  image: File,
+): Promise<SubmissionResponse> {
+  const formData = new FormData();
+  formData.append("image", image);
+  return apiFetch<SubmissionResponse>(
+    `/groups/${groupId}/pins/${pinId}/generations`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+}
+
+/** Poll the status of a generation submission. */
+export function getGeneration(
+  groupId: string,
+  generationId: string,
+): Promise<SubmissionResponse> {
+  return apiFetch<SubmissionResponse>(
+    `/groups/${groupId}/generations/${generationId}`,
+  );
 }

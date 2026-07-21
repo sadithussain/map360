@@ -51,3 +51,13 @@ class LocationPin(Base):
 
     group = relationship("Group", back_populates="location_pins")
     user = relationship("User", back_populates="location_pins")
+    submissions = relationship(
+        "MediaSubmission",
+        back_populates="pin",
+        cascade="all, delete-orphan",
+    )
+    map_objects = relationship(
+        "MapObject",
+        back_populates="pin",
+        cascade="all, delete-orphan",
+    )

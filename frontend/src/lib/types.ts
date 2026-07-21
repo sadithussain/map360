@@ -91,17 +91,16 @@ export type SelectedBuilding = {
   identityStrategy: BuildingIdentityStrategy;
 };
 
-export type CaptureMethod = "images" | "video";
+/** Status of an async single-image 3D generation submission. */
+export type SubmissionStatus = "processing" | "ready" | "failed";
 
-export type ContributionSubmissionDraft = {
-  pinId: string;
-  groupId: string;
-  userId: string;
-  osmBuildingId: number;
-  lat: number;
-  lng: number;
-  captureMethod: CaptureMethod;
-  files: File[];
+export type SubmissionResponse = {
+  id: string;
+  pin_id: string;
+  status: SubmissionStatus;
+  mesh_url: string | null;
+  error_message: string | null;
+  created_at: string;
 };
 
 export type MapObjectResponse = {
@@ -109,6 +108,7 @@ export type MapObjectResponse = {
   pin_id: string;
   lat: number;
   lng: number;
+  mesh_url: string;
 };
 
 export type MapStateResponse = {
