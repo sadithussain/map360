@@ -93,12 +93,12 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 ## 7. 3D Processing Pipeline
 
 - [x] Decide on processing approach — **TRELLIS single-image-to-3D on Colab Gradio; FastAPI middleman via `gradio_client`** (research + infra setup complete)
-- [ ] TRELLIS Gradio client helper (`gradio_client` → active `*.gradio.live` URL)
-- [ ] FastAPI `BackgroundTasks` job (image → Colab → `.glb` → Supabase Storage → DB) instead of Celery/RQ for v1
-- [ ] Background job: pass source image to TRELLIS, store resulting `.glb`
-- [ ] Align generated model to pin's real-world coordinates
-- [ ] Update submission status on success / failure (`processing` → `ready` / `failed`)
-- [ ] Retry handling for failed jobs (heavier queue such as Celery/Redis only if needed later)
+- [x] TRELLIS Gradio client helper (`gradio_client` → active `*.gradio.live` URL)
+- [x] FastAPI `BackgroundTasks` job (image → Colab → `.glb` → Supabase Storage → DB) instead of Celery/RQ for v1
+- [x] Background job: pass source image to TRELLIS, store resulting `.glb`
+- [x] Align generated model to pin's real-world coordinates
+- [x] Update submission status on success / failure (`processing` → `ready` / `failed`)
+- [x] ~~Retry handling for failed jobs (heavier queue such as Celery/Redis only if needed later)~~ Deferred — `BackgroundTasks` is the v1 approach; durable retry (Celery/Redis) only if needed later
 
 ---
 

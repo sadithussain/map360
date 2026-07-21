@@ -6,6 +6,8 @@ touched: storage uploads are mocked and the TRELLIS background task is only
 scheduled (never executed) by ``BackgroundTasks``.
 """
 
+import os
+import tempfile
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -326,6 +328,88 @@ async def test_mark_submission_failed_records_error() -> None:
     assert result.status == SUBMISSION_STATUS_FAILED
     assert result.error_message == "Colab notebook is asleep"
     db.commit.assert_awaited_once()
+
+
+def _session_factory_yielding(db) -> MagicMock:
+    """Build a mock ``AsyncSessionLocal`` whose context manager yields ``db``."""
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=db)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    factory = MagicMock(return_value=ctx)
+    return factory
+
+
+@pytest.mark.asyncio
+async def test_run_generation_job_marks_ready(monkeypatch) -> None:
+    from app.services import generation
+
+    submission = _make_submission(
+        uuid4(), uuid4(), status_value=SUBMISSION_STATUS_PROCESSING
+    )
+
+    monkeypatch.setattr(
+        generation, "AsyncSessionLocal", _session_factory_yielding(AsyncMock())
+    )
+    monkeypatch.setattr(
+        generation, "get_submission", AsyncMock(return_value=submission)
+    )
+    monkeypatch.setattr(
+        generation.trellis, "generate_mesh", MagicMock(return_value="/tmp/model.glb")
+    )
+    monkeypatch.setattr(generation.storage, "upload_file", MagicMock())
+    monkeypatch.setattr(
+        generation.storage,
+        "get_public_url",
+        MagicMock(return_value="https://cdn/model.glb"),
+    )
+    ready_mock = AsyncMock()
+    failed_mock = AsyncMock()
+    monkeypatch.setattr(generation, "mark_submission_ready", ready_mock)
+    monkeypatch.setattr(generation, "mark_submission_failed", failed_mock)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+        temp_path = temp_file.name
+
+    await generation.run_generation_job(submission.id, temp_path)
+
+    ready_mock.assert_awaited_once()
+    failed_mock.assert_not_awaited()
+    # The temp source image is always cleaned up.
+    assert not os.path.exists(temp_path)
+
+
+@pytest.mark.asyncio
+async def test_run_generation_job_marks_failed_on_trellis_error(monkeypatch) -> None:
+    from app.services import generation
+
+    submission = _make_submission(
+        uuid4(), uuid4(), status_value=SUBMISSION_STATUS_PROCESSING
+    )
+
+    monkeypatch.setattr(
+        generation, "AsyncSessionLocal", _session_factory_yielding(AsyncMock())
+    )
+    monkeypatch.setattr(
+        generation, "get_submission", AsyncMock(return_value=submission)
+    )
+    monkeypatch.setattr(
+        generation.trellis,
+        "generate_mesh",
+        MagicMock(side_effect=RuntimeError("Colab notebook is asleep")),
+    )
+    ready_mock = AsyncMock()
+    failed_mock = AsyncMock()
+    monkeypatch.setattr(generation, "mark_submission_ready", ready_mock)
+    monkeypatch.setattr(generation, "mark_submission_failed", failed_mock)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+        temp_path = temp_file.name
+
+    await generation.run_generation_job(submission.id, temp_path)
+
+    failed_mock.assert_awaited_once()
+    ready_mock.assert_not_awaited()
+    assert not os.path.exists(temp_path)
 
 
 def test_get_generation_endpoint_returns_status(monkeypatch) -> None:
