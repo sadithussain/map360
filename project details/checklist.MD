@@ -72,22 +72,21 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] ~~UI flow to choose capture method (3 images vs ~5 second video)~~ Superseded by single-photo capture (TRELLIS single-image-to-3D pivot)
 - [x] ~~Capture UI for three angled images (left / center / right)~~ Superseded by single-photo capture
 - [x] ~~Capture UI for short horizontal video sweep~~ Superseded by single-photo capture
-- [ ] Single-photo capture UI (one high-quality image; camera or file input)
-- [ ] Guidance tooltip: capture the "clearest, most central angle" of the storefront
-- [ ] Client-side validation (single image, size, format)
+- [x] Single-photo capture UI (one high-quality image; camera or file input)
+- [x] Guidance tooltip: capture the "clearest, most central angle" of the storefront
+- [x] Client-side validation (single image, size, format)
 - [x] Attach building metadata (osm_building_id, centroid), group ID, and user ID to each submission
 
 ---
 
 ## 6. Media Upload and Submission Tracking
 
-- [ ] Define `MediaSubmission` model (pin, user, group, source image key, status, mesh keys/url, error)
-- [ ] Endpoint to accept a single-image multipart upload and start generation
-- [ ] Endpoint to poll a submission's processing status
-- [ ] Endpoint to list submissions for a pin / group
-- [ ] Track submission processing status (processing, ready, failed)
-- [ ] Store original image in Supabase Storage with safe key naming
-- [ ] Enforce per-user / per-group upload quotas (optional v1)
+- [x] Define `MediaSubmission` model (pin, user, group, source image key, status, mesh keys/url, error)
+- [x] Endpoint to accept a single-image multipart upload and start generation
+- [x] Endpoint to poll a submission's processing status
+- [x] Endpoint to list submissions for a pin / group
+- [x] Track submission processing status (processing, ready, failed)
+- [x] Store original image in Supabase Storage with safe key naming
 
 ---
 

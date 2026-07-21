@@ -112,6 +112,36 @@ async def mark_submission_failed(
     return submission
 
 
+async def list_submissions_for_pin(
+    db: AsyncSession,
+    group_id: UUID,
+    pin_id: UUID,
+) -> list[MediaSubmission]:
+    """Return all submissions for a pin within a group, newest first."""
+    result = await db.execute(
+        select(MediaSubmission)
+        .where(
+            MediaSubmission.group_id == group_id,
+            MediaSubmission.pin_id == pin_id,
+        )
+        .order_by(MediaSubmission.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def list_submissions_for_group(
+    db: AsyncSession,
+    group_id: UUID,
+) -> list[MediaSubmission]:
+    """Return all submissions for a group, newest first."""
+    result = await db.execute(
+        select(MediaSubmission)
+        .where(MediaSubmission.group_id == group_id)
+        .order_by(MediaSubmission.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def list_map_objects_for_group(
     db: AsyncSession,
     group_id: UUID,

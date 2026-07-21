@@ -13,6 +13,8 @@ from app.crud.generation_crud import (
     create_submission,
     get_pin,
     get_submission,
+    list_submissions_for_group,
+    list_submissions_for_pin,
 )
 from app.crud.group_crud import get_membership as get_membership_crud
 from app.models.media_submission_model import MediaSubmission
@@ -146,3 +148,33 @@ async def get_generation_submission(
         )
 
     return submission
+
+
+async def list_pin_generations(
+    db: AsyncSession,
+    group_id: UUID,
+    pin_id: UUID,
+    current_user: User,
+) -> list[MediaSubmission]:
+    """List all submissions for a pin, enforcing group membership and scope."""
+    await _require_group_membership(db, group_id, current_user)
+
+    pin = await get_pin(db, pin_id)
+    if pin is None or pin.group_id != group_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Location pin not found in this group.",
+        )
+
+    return await list_submissions_for_pin(db, group_id, pin_id)
+
+
+async def list_group_generations(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+) -> list[MediaSubmission]:
+    """List all submissions for a group, enforcing group membership."""
+    await _require_group_membership(db, group_id, current_user)
+
+    return await list_submissions_for_group(db, group_id)

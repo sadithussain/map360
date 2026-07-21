@@ -27,6 +27,8 @@ from app.services import generation_service
 from app.services.generation_service import (
     create_generation_submission,
     get_generation_submission,
+    list_group_generations,
+    list_pin_generations,
 )
 from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.testclient import TestClient
@@ -206,6 +208,80 @@ async def test_get_submission_scoped_to_group(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_pin_generations_returns_submissions(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    pin = _make_pin(group.id, user.id)
+    _pass_membership(monkeypatch, group)
+    monkeypatch.setattr(generation_service, "get_pin", AsyncMock(return_value=pin))
+
+    submissions = [
+        _make_submission(group.id, pin.id, status_value=SUBMISSION_STATUS_READY),
+        _make_submission(group.id, pin.id, status_value=SUBMISSION_STATUS_PROCESSING),
+    ]
+    monkeypatch.setattr(
+        generation_service,
+        "list_submissions_for_pin",
+        AsyncMock(return_value=submissions),
+    )
+
+    result = await list_pin_generations(AsyncMock(), group.id, pin.id, user)
+
+    assert result == submissions
+
+
+@pytest.mark.asyncio
+async def test_list_pin_generations_rejects_missing_pin(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+    monkeypatch.setattr(generation_service, "get_pin", AsyncMock(return_value=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await list_pin_generations(AsyncMock(), group.id, uuid4(), user)
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_list_group_generations_rejects_non_member(monkeypatch) -> None:
+    user = _make_user("outsider")
+    group = _make_group(uuid4())
+
+    monkeypatch.setattr(
+        generation_service, "get_group_by_id", AsyncMock(return_value=group)
+    )
+    monkeypatch.setattr(
+        generation_service, "get_membership_crud", AsyncMock(return_value=None)
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await list_group_generations(AsyncMock(), group.id, user)
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.asyncio
+async def test_list_group_generations_returns_submissions(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    submissions = [
+        _make_submission(group.id, uuid4(), status_value=SUBMISSION_STATUS_READY),
+    ]
+    monkeypatch.setattr(
+        generation_service,
+        "list_submissions_for_group",
+        AsyncMock(return_value=submissions),
+    )
+
+    result = await list_group_generations(AsyncMock(), group.id, user)
+
+    assert result == submissions
+
+
+@pytest.mark.asyncio
 async def test_mark_submission_ready_creates_map_object(monkeypatch) -> None:
     from app.crud import generation_crud
 
@@ -286,4 +362,5 @@ def test_generation_routes_are_registered() -> None:
     paths = {route.path for route in app.routes if hasattr(route, "path")}
 
     assert "/groups/{group_id}/pins/{pin_id}/generations" in paths
+    assert "/groups/{group_id}/generations" in paths
     assert "/groups/{group_id}/generations/{generation_id}" in paths

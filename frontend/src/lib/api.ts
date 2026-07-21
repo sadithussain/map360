@@ -188,3 +188,20 @@ export function getGeneration(
     `/groups/${groupId}/generations/${generationId}`,
   );
 }
+
+/** List all generation submissions for a pin (newest first). */
+export function listPinGenerations(
+  groupId: string,
+  pinId: string,
+): Promise<SubmissionResponse[]> {
+  return apiFetch<SubmissionResponse[]>(
+    `/groups/${groupId}/pins/${pinId}/generations`,
+  );
+}
+
+/** List all generation submissions for a group (newest first). */
+export function listGroupGenerations(
+  groupId: string,
+): Promise<SubmissionResponse[]> {
+  return apiFetch<SubmissionResponse[]>(`/groups/${groupId}/generations`);
+}

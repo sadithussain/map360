@@ -17,6 +17,12 @@ from app.services.generation_service import (
 from app.services.generation_service import (
     get_generation_submission as get_generation_submission_service,
 )
+from app.services.generation_service import (
+    list_group_generations as list_group_generations_service,
+)
+from app.services.generation_service import (
+    list_pin_generations as list_pin_generations_service,
+)
 from app.services.map_service import create_location_pin as create_location_pin_service
 from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_state as get_map_state_service
@@ -100,6 +106,39 @@ async def create_generation(
         background_tasks=background_tasks,
     )
     return SubmissionResponse.model_validate(submission)
+
+
+@router.get(
+    "/groups/{group_id}/pins/{pin_id}/generations",
+    response_model=list[SubmissionResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def list_pin_generations(
+    group_id: UUID,
+    pin_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SubmissionResponse]:
+    """List all generation submissions for a pin, newest first."""
+    submissions = await list_pin_generations_service(
+        db, group_id, pin_id, current_user
+    )
+    return [SubmissionResponse.model_validate(s) for s in submissions]
+
+
+@router.get(
+    "/groups/{group_id}/generations",
+    response_model=list[SubmissionResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def list_group_generations(
+    group_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[SubmissionResponse]:
+    """List all generation submissions for a group, newest first."""
+    submissions = await list_group_generations_service(db, group_id, current_user)
+    return [SubmissionResponse.model_validate(s) for s in submissions]
 
 
 @router.get(
