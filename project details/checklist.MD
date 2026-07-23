@@ -104,13 +104,14 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 8. Generated Models and Map Objects
 
-- [ ] Define `MapObject` model (group, pin, submission, coordinates, `mesh_url`)
-- [ ] Include map objects (with `mesh_url`) in the group map-state response
-- [ ] Endpoint to list map objects for a group (with pagination / bounding box)
-- [ ] Endpoint to fetch a single map object with its mesh URL
-- [ ] Frontend loader for generated 3D meshes (Three.js / R3F `useGLTF`)
-- [ ] Real-time or near-real-time update of group map when new object is added (WebSocket / polling)
-- [ ] Visual indicator for newly added objects
+- [x] Define `MapObject` model (group, pin, submission, coordinates, `mesh_url`)
+- [x] Include map objects (with `mesh_url`) in the group map-state response
+- [x] Endpoint to list map objects for a group (with bounding-box filter)
+- [x] Endpoint to fetch a single map object with its mesh URL
+- [x] Frontend loader for generated 3D meshes (Three.js MapLibre custom layer; `.glb` anchored at the pin's real-world lat/lng, normalized to ~12 m and grounded)
+- [x] Hide the default grey building (2D fill + 3D extrusion) under each contributed mesh so the generated model replaces the stock footprint
+- [x] Real-time or near-real-time update of group map when new object is added (silent map-state polling, ~20s)
+- [x] Visual indicator for newly added objects (short emissive pulse on the mesh)
 
 ---
 

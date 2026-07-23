@@ -15,9 +15,15 @@ import {
 } from "../lib/buildingSelection";
 import { FALLBACK_MAP_VIEW, getInitialMapView } from "../lib/mapGeolocation";
 import { ensureMapLibreWorker } from "../lib/maplibreSetup";
-import { applyGreyMapStyle } from "../lib/mapGreyStyle";
+import { applyGreyMapStyle, setHiddenBuildingIds } from "../lib/mapGreyStyle";
 import { pinsBounds } from "../lib/mapState";
-import type { LocationPinResponse, MapStateResponse, SelectedBuilding } from "../lib/types";
+import { GeneratedMeshLayer } from "../lib/meshLayer";
+import type {
+  LocationPinResponse,
+  MapObjectResponse,
+  MapStateResponse,
+  SelectedBuilding,
+} from "../lib/types";
 
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const GROUP_PINS_SOURCE_ID = "group-pins";
@@ -119,6 +125,11 @@ export function WorldMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const meshLayerRef = useRef<GeneratedMeshLayer | null>(null);
+  // Object ids already shown for the current group, so only newly appeared
+  // objects pulse. Reset when the active group changes.
+  const seenObjectIdsRef = useRef<Set<string>>(new Set());
+  const lastGroupIdRef = useRef<string | null>(null);
   const mapStateRef = useRef(mapState);
   const buildingSelectionPhaseRef = useRef(buildingSelectionPhase);
   const selectedBuildingRef = useRef(selectedBuilding);
@@ -362,6 +373,11 @@ export function WorldMap({
       }
 
       updateGroupPinLayer(map, mapStateRef.current);
+
+      const meshLayer = new GeneratedMeshLayer();
+      meshLayerRef.current = meshLayer;
+      map.addLayer(meshLayer);
+
       setMapReady(true);
       map.resize();
 
@@ -403,6 +419,9 @@ export function WorldMap({
       disposed = true;
       setMapReady(false);
       mapRef.current = null;
+      meshLayerRef.current = null;
+      seenObjectIdsRef.current = new Set();
+      lastGroupIdRef.current = null;
       window.clearTimeout(refreshTimer);
       resizeObserver.disconnect();
       map.off("click", handleClick);
@@ -423,7 +442,42 @@ export function WorldMap({
 
     updateGroupPinLayer(map, mapState);
 
-    if (variant === "workspace" && mapState?.pins?.length) {
+    const objects: MapObjectResponse[] = mapState?.objects ?? [];
+    const meshLayer = meshLayerRef.current;
+    meshLayer?.setObjects(objects);
+    // Hide the default gray footprints wherever a contributed mesh sits.
+    setHiddenBuildingIds(
+      map,
+      objects.map((object) => object.osm_building_id),
+    );
+
+    const groupId = mapState?.group_id ?? null;
+    // Fit the camera only on the first load of a group or when a new object
+    // arrives, never on every background poll (which would jump the camera).
+    let shouldFit = false;
+    if (groupId !== lastGroupIdRef.current) {
+      // New group (or first load): show existing objects without pulsing them.
+      lastGroupIdRef.current = groupId;
+      seenObjectIdsRef.current = new Set(objects.map((object) => object.id));
+      shouldFit = true;
+    } else {
+      // Same group: pulse only objects that have appeared since last sync.
+      const currentIds = new Set(objects.map((object) => object.id));
+      for (const object of objects) {
+        if (!seenObjectIdsRef.current.has(object.id)) {
+          meshLayer?.highlightObject(object.id);
+          seenObjectIdsRef.current.add(object.id);
+          shouldFit = true;
+        }
+      }
+      for (const id of [...seenObjectIdsRef.current]) {
+        if (!currentIds.has(id)) {
+          seenObjectIdsRef.current.delete(id);
+        }
+      }
+    }
+
+    if (variant === "workspace" && shouldFit && mapState?.pins?.length) {
       fitMapToPins(map, mapState.pins);
     }
   }, [mapState, variant, mapReady]);

@@ -46,10 +46,15 @@ class LocationPinResponse(BaseModel):
 
 
 class MapObjectResponse(BaseModel):
-    """A user-generated 3D object placed on the map at a pin location."""
+    """A user-generated 3D object placed on the map at a pin location.
+
+    ``osm_building_id`` is carried through from the anchoring pin so the
+    frontend can hide the matching default gray building under the mesh.
+    """
 
     id: UUID
     pin_id: UUID
+    osm_building_id: int
     lat: float
     lng: float
     mesh_url: str = Field(validation_alias="mesh_public_url")

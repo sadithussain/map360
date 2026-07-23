@@ -1,4 +1,4 @@
-import type { ExpressionSpecification, Map } from "maplibre-gl";
+import type { ExpressionSpecification, FilterSpecification, Map } from "maplibre-gl";
 
 import {
   ensureBuildingHighlightAnchorLayer,
@@ -164,4 +164,76 @@ export function applyGreyMapStyle(map: Map): void {
 
   setLayoutIfExists(map, "road_one_way_arrow", "visibility", "none");
   setLayoutIfExists(map, "road_one_way_arrow_opposite", "visibility", "none");
+}
+
+// Default gray building layers whose footprints must be hidden wherever a
+// contributed mesh is placed, so the generated model does not intersect the
+// stock extrusion or show a gray footprint underneath.
+const HIDEABLE_BUILDING_LAYER_IDS = ["building", "building-3d", "grey-3d-buildings"];
+
+// The base filter of each hideable layer, captured before we add any osm_id
+// exclusion so re-applying never nests filters. Keyed per map instance since
+// the app can mount more than one map (landing + workspace).
+const baseBuildingFilters = new WeakMap<
+  Map,
+  globalThis.Map<string, FilterSpecification | null>
+>();
+
+function baseBuildingFilter(map: Map, layerId: string): FilterSpecification | null {
+  let perMap = baseBuildingFilters.get(map);
+  if (!perMap) {
+    perMap = new globalThis.Map();
+    baseBuildingFilters.set(map, perMap);
+  }
+  if (!perMap.has(layerId)) {
+    const current = map.getFilter(layerId) as FilterSpecification | undefined;
+    perMap.set(layerId, current ?? null);
+  }
+  return perMap.get(layerId) ?? null;
+}
+
+/**
+ * Hide the default gray buildings that match the given OSM building ids, so
+ * user-generated meshes replace (rather than intersect) the stock footprints.
+ *
+ * Pass an empty array to restore all default buildings. Compares as strings to
+ * tolerate numeric-vs-string ``osm_id`` typing across tile sources.
+ */
+export function setHiddenBuildingIds(map: Map, osmIds: number[]): void {
+  const stringIds = osmIds
+    .filter((id) => Number.isFinite(id))
+    .map((id) => String(id));
+
+  // A building id may have been captured from the tile's ``osm_id`` property or
+  // from its raw feature id (see buildingSelection). Exclude a footprint when
+  // either identifier matches a contributed building, comparing as strings to
+  // tolerate numeric-vs-string typing.
+  const exclusion: ExpressionSpecification | null =
+    stringIds.length === 0
+      ? null
+      : [
+          "!",
+          [
+            "any",
+            ["in", ["to-string", ["coalesce", ["get", "osm_id"], ""]], ["literal", stringIds]],
+            ["in", ["to-string", ["id"]], ["literal", stringIds]],
+          ],
+        ];
+
+  for (const layerId of HIDEABLE_BUILDING_LAYER_IDS) {
+    if (!map.getLayer(layerId)) {
+      continue;
+    }
+
+    const base = baseBuildingFilter(map, layerId);
+    if (exclusion === null) {
+      map.setFilter(layerId, base);
+      continue;
+    }
+
+    // In the Liberty style these layers have no base filter; when one exists we
+    // combine so the original visibility rule is preserved alongside the hide.
+    const combined = (base ? ["all", base, exclusion] : exclusion) as FilterSpecification;
+    map.setFilter(layerId, combined);
+  }
 }

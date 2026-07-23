@@ -106,6 +106,7 @@ export type SubmissionResponse = {
 export type MapObjectResponse = {
   id: string;
   pin_id: string;
+  osm_building_id: number;
   lat: number;
   lng: number;
   mesh_url: string;

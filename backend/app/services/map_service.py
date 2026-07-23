@@ -2,7 +2,10 @@
 
 from uuid import UUID
 
-from app.crud.generation_crud import list_map_objects_for_group
+from app.crud.generation_crud import (
+    get_map_object_for_group,
+    list_map_objects_for_group,
+)
 from app.crud.group_crud import get_membership as get_membership_crud
 from app.crud.location_pin_crud import (
     create_location_pin as create_location_pin_crud,
@@ -17,6 +20,7 @@ from app.crud.location_pin_crud import (
     list_rendered_location_pins_for_group,
 )
 from app.models.location_pin_model import LocationPin
+from app.models.map_object_model import MapObject
 from app.models.user_model import User
 from app.schemas.map_schema import (
     LocationPinCreate,
@@ -89,6 +93,21 @@ def _pin_to_response(pin: LocationPin) -> LocationPinResponse:
     return LocationPinResponse.model_validate(pin)
 
 
+def _map_object_to_response(obj: MapObject) -> MapObjectResponse:
+    """Build a map-object response, pulling ``osm_building_id`` from the pin.
+
+    Assumes ``obj.pin`` was eager-loaded by the CRUD layer.
+    """
+    return MapObjectResponse(
+        id=obj.id,
+        pin_id=obj.pin_id,
+        osm_building_id=obj.pin.osm_building_id,
+        lat=obj.lat,
+        lng=obj.lng,
+        mesh_public_url=obj.mesh_public_url,
+    )
+
+
 async def get_map_state(
     db: AsyncSession,
     group_id: UUID,
@@ -102,8 +121,40 @@ async def get_map_state(
     return MapStateResponse(
         group_id=group_id,
         pins=[_pin_to_response(pin) for pin in pins],
-        objects=[MapObjectResponse.model_validate(obj) for obj in map_objects],
+        objects=[_map_object_to_response(obj) for obj in map_objects],
     )
+
+
+async def list_map_objects(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+    *,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> list[MapObjectResponse]:
+    """List a group's map objects, optionally filtered by a lng/lat bbox."""
+    await _require_group_membership(db, group_id, current_user)
+
+    map_objects = await list_map_objects_for_group(db, group_id, bbox=bbox)
+    return [_map_object_to_response(obj) for obj in map_objects]
+
+
+async def get_map_object(
+    db: AsyncSession,
+    group_id: UUID,
+    object_id: UUID,
+    current_user: User,
+) -> MapObjectResponse:
+    """Return a single map object (with its mesh URL) scoped to a group."""
+    await _require_group_membership(db, group_id, current_user)
+
+    obj = await get_map_object_for_group(db, group_id, object_id)
+    if obj is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Map object not found in this group.",
+        )
+    return _map_object_to_response(obj)
 
 
 async def create_location_pin(

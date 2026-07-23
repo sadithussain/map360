@@ -16,6 +16,7 @@ from app.models.media_submission_model import (
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 
 async def create_submission(
@@ -145,11 +146,42 @@ async def list_submissions_for_group(
 async def list_map_objects_for_group(
     db: AsyncSession,
     group_id: UUID,
+    *,
+    bbox: tuple[float, float, float, float] | None = None,
 ) -> list[MapObject]:
-    """Return all generated map objects for a group, oldest first."""
-    result = await db.execute(
+    """Return generated map objects for a group, oldest first.
+
+    Eager-loads the anchoring pin so callers can read ``osm_building_id``
+    without a lazy load. When ``bbox`` (min_lng, min_lat, max_lng, max_lat)
+    is given, only objects whose coordinates fall inside it are returned.
+    """
+    query = (
         select(MapObject)
+        .options(selectinload(MapObject.pin))
         .where(MapObject.group_id == group_id)
         .order_by(MapObject.created_at.asc())
     )
+    if bbox is not None:
+        min_lng, min_lat, max_lng, max_lat = bbox
+        query = query.where(
+            MapObject.lng >= min_lng,
+            MapObject.lng <= max_lng,
+            MapObject.lat >= min_lat,
+            MapObject.lat <= max_lat,
+        )
+    result = await db.execute(query)
     return list(result.scalars().all())
+
+
+async def get_map_object_for_group(
+    db: AsyncSession,
+    group_id: UUID,
+    object_id: UUID,
+) -> MapObject | None:
+    """Return a single map object scoped to a group, with its pin loaded."""
+    result = await db.execute(
+        select(MapObject)
+        .options(selectinload(MapObject.pin))
+        .where(MapObject.id == object_id, MapObject.group_id == group_id)
+    )
+    return result.scalar_one_or_none()

@@ -14,6 +14,10 @@ type UseGroupMapStateResult = {
   refreshMapState: () => Promise<MapStateResponse | null>;
 };
 
+// How often the active group's map state is silently re-fetched so members see
+// meshes contributed by others without a manual refresh.
+const MAP_STATE_POLL_INTERVAL_MS = 20_000;
+
 export function useGroupMapState(
   activeGroupId: string | null,
 ): UseGroupMapStateResult {
@@ -103,6 +107,36 @@ export function useGroupMapState(
 
     return () => {
       cancelled = true;
+    };
+  }, [activeGroupId]);
+
+  // Poll the active group's map state so newly contributed meshes appear for
+  // every member. This is a silent refresh: it never toggles the loading state
+  // or clears the map on transient errors, so the current view stays stable.
+  useEffect(() => {
+    if (!activeGroupId) {
+      return;
+    }
+
+    let cancelled = false;
+    const interval = window.setInterval(() => {
+      void getGroupMapState(activeGroupId)
+        .then((state) => {
+          if (cancelled) {
+            return;
+          }
+          setCachedMapState(activeGroupId, state);
+          setMapState(state);
+          setMapStateError("");
+        })
+        .catch(() => {
+          // Keep the last good state; the next poll will retry.
+        });
+    }, MAP_STATE_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
     };
   }, [activeGroupId]);
 

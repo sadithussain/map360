@@ -8,6 +8,7 @@ from app.models.user_model import User
 from app.schemas.map_schema import (
     LocationPinCreate,
     LocationPinResponse,
+    MapObjectResponse,
     MapStateResponse,
     SubmissionResponse,
 )
@@ -25,8 +26,20 @@ from app.services.generation_service import (
 )
 from app.services.map_service import create_location_pin as create_location_pin_service
 from app.services.map_service import delete_location_pin as delete_location_pin_service
+from app.services.map_service import get_map_object as get_map_object_service
 from app.services.map_service import get_map_state as get_map_state_service
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Response, UploadFile, status
+from app.services.map_service import list_map_objects as list_map_objects_service
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["maps"])
@@ -44,6 +57,51 @@ async def get_map_state(
 ) -> MapStateResponse:
     """Return the map state for a group the authenticated user belongs to."""
     return await get_map_state_service(db, group_id, current_user)
+
+
+@router.get(
+    "/groups/{group_id}/map-objects",
+    response_model=list[MapObjectResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def list_map_objects(
+    group_id: UUID,
+    min_lng: float | None = Query(default=None, ge=-180, le=180),
+    min_lat: float | None = Query(default=None, ge=-90, le=90),
+    max_lng: float | None = Query(default=None, ge=-180, le=180),
+    max_lat: float | None = Query(default=None, ge=-90, le=90),
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[MapObjectResponse]:
+    """List a group's generated map objects, optionally within a lng/lat bbox.
+
+    All four bbox params must be supplied together, or none of them.
+    """
+    bbox_values = (min_lng, min_lat, max_lng, max_lat)
+    provided = [value is not None for value in bbox_values]
+    if any(provided) and not all(provided):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide all of min_lng, min_lat, max_lng, max_lat, or none.",
+        )
+
+    bbox = bbox_values if all(provided) else None
+    return await list_map_objects_service(db, group_id, current_user, bbox=bbox)
+
+
+@router.get(
+    "/groups/{group_id}/map-objects/{object_id}",
+    response_model=MapObjectResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_map_object(
+    group_id: UUID,
+    object_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> MapObjectResponse:
+    """Return a single map object with its mesh URL, scoped to the group."""
+    return await get_map_object_service(db, group_id, object_id, current_user)
 
 
 @router.post(

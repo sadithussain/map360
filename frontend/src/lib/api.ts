@@ -5,6 +5,7 @@ import type {
   GroupResponse,
   LocationPinCreate,
   LocationPinResponse,
+  MapObjectResponse,
   MapStateResponse,
   MembershipResponse,
   SubmissionResponse,
@@ -140,6 +141,40 @@ export function joinGroup(payload: GroupJoinRequest): Promise<MembershipResponse
 
 export function getGroupMapState(groupId: string): Promise<MapStateResponse> {
   return apiFetch<MapStateResponse>(`/groups/${groupId}/map-state`);
+}
+
+/** Optional lng/lat bounding box for {@link listMapObjects}. */
+export type MapObjectsBbox = {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+};
+
+/** List a group's generated map objects, optionally within a bounding box. */
+export function listMapObjects(
+  groupId: string,
+  bbox?: MapObjectsBbox,
+): Promise<MapObjectResponse[]> {
+  const query = bbox
+    ? `?${new URLSearchParams({
+        min_lng: String(bbox.minLng),
+        min_lat: String(bbox.minLat),
+        max_lng: String(bbox.maxLng),
+        max_lat: String(bbox.maxLat),
+      }).toString()}`
+    : "";
+  return apiFetch<MapObjectResponse[]>(`/groups/${groupId}/map-objects${query}`);
+}
+
+/** Fetch a single map object (with its mesh URL) from a group. */
+export function getMapObject(
+  groupId: string,
+  objectId: string,
+): Promise<MapObjectResponse> {
+  return apiFetch<MapObjectResponse>(
+    `/groups/${groupId}/map-objects/${objectId}`,
+  );
 }
 
 export function createLocationPin(
