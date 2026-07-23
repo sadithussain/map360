@@ -10,6 +10,7 @@ import {
   ApiError,
   createGeneration,
   createLocationPin,
+  deleteAllLocationPins,
   deleteLocationPin,
   getGeneration,
 } from "../lib/api";
@@ -47,6 +48,8 @@ function AppShell() {
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [isClearingPins, setIsClearingPins] = useState(false);
+  const [clearPinsError, setClearPinsError] = useState("");
 
   const resetContributionFlow = useCallback(() => {
     setContributionStep("idle");
@@ -63,6 +66,37 @@ function AppShell() {
     resetContributionFlow();
     setContributionStep("selecting");
     setMissedClickHint("Click a building on the map to scan it.");
+  };
+
+  const handleClearAllPins = async () => {
+    if (!activeGroupId || isClearingPins) {
+      return;
+    }
+
+    const pinCount = mapState?.pins.length ?? 0;
+    const confirmed = window.confirm(
+      pinCount > 0
+        ? `Delete all ${pinCount} pin${pinCount === 1 ? "" : "s"} from "${activeGroup?.name ?? "this map"}"? This also removes their meshes and cannot be undone.`
+        : `Clear all pins from "${activeGroup?.name ?? "this map"}"? This also removes any orphan submissions and cannot be undone.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsClearingPins(true);
+    setClearPinsError("");
+    try {
+      await deleteAllLocationPins(activeGroupId);
+      await refreshMapState();
+    } catch (error) {
+      setClearPinsError(
+        error instanceof ApiError
+          ? error.message
+          : "Failed to clear pins. Please try again.",
+      );
+    } finally {
+      setIsClearingPins(false);
+    }
   };
 
   const handleBuildingSelect = (building: SelectedBuilding) => {
@@ -238,17 +272,36 @@ function AppShell() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-end px-4">
+      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-end gap-2 px-4">
         {contributionStep === "idle" && (
-          <button
-            type="button"
-            onClick={handleStartContribution}
-            className="pointer-events-auto rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-          >
-            Add location
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={handleClearAllPins}
+              disabled={isClearingPins || !activeGroupId}
+              className="pointer-events-auto rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              title="Delete every pin and mesh on this group's map"
+            >
+              {isClearingPins ? "Clearing…" : "Clear all pins"}
+            </button>
+            <button
+              type="button"
+              onClick={handleStartContribution}
+              className="pointer-events-auto rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
+            >
+              Add location
+            </button>
+          </>
         )}
       </div>
+
+      {clearPinsError && contributionStep === "idle" && (
+        <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-end px-4">
+          <p className="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 shadow-sm">
+            {clearPinsError}
+          </p>
+        </div>
+      )}
 
       {buildingSelectionPhase === "choosing" && (
         <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-center px-4">

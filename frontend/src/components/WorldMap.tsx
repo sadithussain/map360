@@ -15,7 +15,7 @@ import {
 } from "../lib/buildingSelection";
 import { FALLBACK_MAP_VIEW, getInitialMapView } from "../lib/mapGeolocation";
 import { ensureMapLibreWorker } from "../lib/maplibreSetup";
-import { applyGreyMapStyle, setHiddenBuildingIds } from "../lib/mapGreyStyle";
+import { applyGreyMapStyle } from "../lib/mapGreyStyle";
 import { pinsBounds } from "../lib/mapState";
 import { GeneratedMeshLayer } from "../lib/meshLayer";
 import type {
@@ -445,11 +445,12 @@ export function WorldMap({
     const objects: MapObjectResponse[] = mapState?.objects ?? [];
     const meshLayer = meshLayerRef.current;
     meshLayer?.setObjects(objects);
-    // Hide the default gray footprints wherever a contributed mesh sits.
-    setHiddenBuildingIds(
-      map,
-      objects.map((object) => object.osm_building_id),
-    );
+    // We intentionally no longer hide the stock gray building by osm_id: OSM /
+    // OpenFreeMap often merge many structures (terraces, blocks) into one shared
+    // id, so hiding erased whole streets. Instead each mesh queries the stock
+    // building height at its pin and scales/lifts to envelop that extrusion
+    // (see queryStockBuildingHeight in meshLayer.ts), so it stays the most
+    // visible object without touching neighboring buildings.
 
     const groupId = mapState?.group_id ?? null;
     // Fit the camera only on the first load of a group or when a new object

@@ -89,3 +89,18 @@ async def delete_location_pin(
     """Delete a pin via the ORM so submissions/objects cascade-delete."""
     await db.delete(pin)
     await db.flush()
+
+
+async def delete_all_location_pins_for_group(
+    db: AsyncSession,
+    group_id: UUID,
+) -> int:
+    """Delete every pin in a group via the ORM (cascades submissions/objects).
+
+    Returns the number of pins deleted. Used for test/dev map resets.
+    """
+    pins = await list_location_pins_for_group(db, group_id)
+    for pin in pins:
+        await db.delete(pin)
+    await db.flush()
+    return len(pins)

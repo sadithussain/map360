@@ -13,6 +13,7 @@ from app.models.location_pin_model import LocationPin
 from app.models.map_object_model import MapObject
 from app.models.user_model import User
 from app.schemas.map_schema import MapObjectResponse, MapStateResponse
+from app.services.map_service import delete_all_location_pins as delete_all_location_pins_service
 from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_object as get_map_object_service
 from app.services.map_service import get_map_state as get_map_state_service
@@ -467,4 +468,52 @@ def test_delete_pin_endpoint_returns_204(monkeypatch) -> None:
     _, awaited_group_id, awaited_pin_id, awaited_user = service_mock.await_args.args
     assert awaited_group_id == group_id
     assert awaited_pin_id == pin_id
+    assert awaited_user is requester
+
+
+@pytest.mark.asyncio
+async def test_delete_all_pins_success_calls_crud_and_commits(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    delete_all_mock = AsyncMock(return_value=3)
+    monkeypatch.setattr(
+        "app.services.map_service.delete_all_location_pins_for_group_crud",
+        delete_all_mock,
+    )
+
+    db = AsyncMock()
+    deleted = await delete_all_location_pins_service(db, group.id, user)
+
+    assert deleted == 3
+    delete_all_mock.assert_awaited_once()
+    db.commit.assert_awaited_once()
+
+
+def test_delete_all_pins_endpoint_returns_count(monkeypatch) -> None:
+    requester = _make_user("requester")
+    group_id = uuid4()
+
+    service_mock = AsyncMock(return_value=5)
+    monkeypatch.setattr(
+        "app.routers.map_router.delete_all_location_pins_service", service_mock
+    )
+
+    async def _override_get_db():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_authenticated_user] = lambda: requester
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        client = TestClient(app)
+        response = client.delete(f"/groups/{group_id}/pins")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 5}
+    service_mock.assert_awaited_once()
+    _, awaited_group_id, awaited_user = service_mock.await_args.args
+    assert awaited_group_id == group_id
     assert awaited_user is requester

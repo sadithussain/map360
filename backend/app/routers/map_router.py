@@ -25,6 +25,9 @@ from app.services.generation_service import (
     list_pin_generations as list_pin_generations_service,
 )
 from app.services.map_service import create_location_pin as create_location_pin_service
+from app.services.map_service import (
+    delete_all_location_pins as delete_all_location_pins_service,
+)
 from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_object as get_map_object_service
 from app.services.map_service import get_map_state as get_map_state_service
@@ -117,6 +120,23 @@ async def create_location_pin(
 ) -> LocationPinResponse:
     """Create a location pin from a selected base-map building."""
     return await create_location_pin_service(db, group_id, current_user, payload)
+
+
+@router.delete(
+    "/groups/{group_id}/pins",
+    status_code=status.HTTP_200_OK,
+)
+async def delete_all_location_pins(
+    group_id: UUID,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Delete every location pin in a group (cascades submissions/objects).
+
+    Useful during testing to reset a group's map without deleting the group.
+    """
+    deleted = await delete_all_location_pins_service(db, group_id, current_user)
+    return {"deleted": deleted}
 
 
 @router.delete(

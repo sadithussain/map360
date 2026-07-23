@@ -197,6 +197,15 @@ export function deleteLocationPin(
   });
 }
 
+/** Delete every location pin in a group (cascades submissions/objects). */
+export function deleteAllLocationPins(
+  groupId: string,
+): Promise<{ deleted: number }> {
+  return apiFetch<{ deleted: number }>(`/groups/${groupId}/pins`, {
+    method: "DELETE",
+  });
+}
+
 /** Upload one photo and start async TRELLIS mesh generation for a pin. */
 export function createGeneration(
   groupId: string,

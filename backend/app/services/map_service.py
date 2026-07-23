@@ -11,6 +11,9 @@ from app.crud.location_pin_crud import (
     create_location_pin as create_location_pin_crud,
 )
 from app.crud.location_pin_crud import (
+    delete_all_location_pins_for_group as delete_all_location_pins_for_group_crud,
+)
+from app.crud.location_pin_crud import (
     delete_location_pin as delete_location_pin_crud,
 )
 from app.crud.location_pin_crud import (
@@ -213,3 +216,19 @@ async def delete_location_pin(
 
     await delete_location_pin_crud(db, pin)
     await db.commit()
+
+
+async def delete_all_location_pins(
+    db: AsyncSession,
+    group_id: UUID,
+    current_user: User,
+) -> int:
+    """Delete every pin in a group (and cascaded submissions/objects).
+
+    Intended for test/dev map resets. Enforces group membership. Returns the
+    number of pins removed.
+    """
+    await _require_group_membership(db, group_id, current_user)
+    deleted = await delete_all_location_pins_for_group_crud(db, group_id)
+    await db.commit()
+    return deleted
