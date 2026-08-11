@@ -16,15 +16,13 @@ import pytest
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
-from app.models.group_model import Group, Membership
-from app.models.location_pin_model import LocationPin
+from app.models.group_model import Membership
 from app.models.media_submission_model import (
     SUBMISSION_STATUS_FAILED,
     SUBMISSION_STATUS_PROCESSING,
     SUBMISSION_STATUS_READY,
     MediaSubmission,
 )
-from app.models.user_model import User
 from app.services import generation_service
 from app.services.generation_service import (
     create_generation_submission,
@@ -32,34 +30,9 @@ from app.services.generation_service import (
     list_group_generations,
     list_pin_generations,
 )
+from conftest import make_group as _make_group, make_pin as _make_pin, make_user as _make_user
 from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.testclient import TestClient
-
-
-def _make_user(username: str) -> User:
-    user = User(username=username, email=f"{username}@example.com", hashed_password="x")
-    user.id = uuid4()
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    return group
-
-
-def _make_pin(group_id, user_id) -> LocationPin:
-    pin = LocationPin(
-        group_id=group_id,
-        user_id=user_id,
-        osm_building_id=123,
-        lat=40.5,
-        lng=-73.9,
-        building_geometry={"type": "Polygon", "coordinates": [[[0, 0]]]},
-        label=None,
-    )
-    pin.id = uuid4()
-    return pin
 
 
 def _make_submission(group_id, pin_id, *, status_value: str) -> MediaSubmission:

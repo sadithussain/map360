@@ -12,7 +12,6 @@ These tests deliberately avoid a live database: the CRUD layer is exercised with
 a mocked ``AsyncSession`` and the router with FastAPI dependency overrides.
 """
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -21,22 +20,15 @@ from app.crud.group_crud import get_user_groups as get_user_groups_crud
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
-from app.models.group_model import Group
 from app.models.user_model import User
 from app.services.group_service import get_user_groups as get_user_groups_service
+from conftest import make_group
 from fastapi.testclient import TestClient
 
 
-def _make_group(name: str, owner_id) -> Group:
-    """Build an in-memory ``Group`` with server-generated fields populated.
-
-    Column defaults only run on flush, so ``id`` and ``created_at`` are set
-    explicitly to mimic a persisted, refreshed row.
-    """
-    group = Group(name=name, owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
+def _make_group(name: str, owner_id):
+    """Build an in-memory ``Group`` via the shared factory (name-first here)."""
+    return make_group(owner_id, name=name)
 
 
 @pytest.mark.asyncio

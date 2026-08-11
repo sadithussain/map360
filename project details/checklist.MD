@@ -127,32 +127,16 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ---
 
-## 10. Content Boundaries and Moderation
+## 10. Quality (Backend Tests)
 
-- [ ] Enforce hard privacy isolation between groups in all queries
-- [ ] Validation that submissions belong to a real, accessible pin in the user's group
-- [ ] Duplicate detection (same pin scanned excessively in short window)
-- [ ] Basic content checks (file types, dimensions, duration limits)
-- [ ] Group owner tools to remove a submission or map object
-- [ ] Report / flag submission endpoint (optional v1)
+- [x] Unit tests for CRUD layer (users, groups, location pins, activity)
+- [x] Unit tests for service layer (auth, groups, map/pin creation, activity)
+- [x] Router coverage for auth, groups, pins, submissions, activity
+- [x] Refine shared test fixtures/helpers to reduce duplication
 
 ---
 
-## 11. Quality, Observability, and Deployment
-
-- [ ] Unit tests for CRUD and service layer
-- [ ] Integration tests for auth, groups, submissions
-- [ ] Frontend component / interaction tests
-- [ ] Structured logging across backend and worker
-- [ ] Error tracking (Sentry or similar)
-- [ ] Health check and readiness endpoints
-- [ ] Containerize backend, worker, and frontend (Dockerfiles)
-- [ ] CI pipeline (lint, test, build)
-- [ ] Deployment configuration for staging and production
-
----
-
-## 12. Optional Future Expansion
+## 11. Optional Future Expansion
 
 - [ ] Time-based evolution of maps (historical layers)
 - [ ] Ratings or tagging of locations

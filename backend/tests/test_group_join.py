@@ -25,57 +25,12 @@ from app.crud.group_crud import create_group_invite_code as create_group_invite_
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
-from app.models.group_model import Group, GroupInviteCode, Membership
-from app.models.user_model import User
+from app.models.group_model import GroupInviteCode, Membership
 from app.schemas.group_schema import GroupInviteCodeResponse, GroupJoinRequest
 from app.services.group_service import create_group_invite_code as create_group_invite_code_service, join_group_by_invite_code as join_group_by_invite_code_service
+from conftest import make_group as _make_group, make_invite_code as _make_invite_code, make_membership as _make_membership, make_user as _make_user
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
-
-
-def _make_user(username: str) -> User:
-    """Build an in-memory ``User`` with server-generated fields populated."""
-    user = User(
-        username=username,
-        email=f"{username}@example.com",
-        hashed_password="x",
-    )
-    user.id = uuid4()
-    user.experience_points = 0
-    user.created_at = datetime.now(UTC)
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
-
-
-def _make_invite_code(
-    group_id,
-    *,
-    revoked_at=None,
-    expires_at=None,
-) -> GroupInviteCode:
-    invite_code = GroupInviteCode(
-        group_id=group_id,
-        code_hash="hash",
-        created_by_id=uuid4(),
-    )
-    invite_code.id = uuid4()
-    invite_code.created_at = datetime.now(UTC)
-    invite_code.revoked_at = revoked_at
-    invite_code.expires_at = expires_at
-    return invite_code
-
-
-def _make_membership(group_id, user_id, role: str = "member") -> Membership:
-    membership = Membership(user_id=user_id, group_id=group_id, role=role)
-    membership.id = uuid4()
-    membership.joined_at = datetime.now(UTC)
-    return membership
 
 
 # --- CRUD -----------------------------------------------------------------

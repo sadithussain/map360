@@ -5,8 +5,8 @@ export type MapView = {
 };
 
 export const FALLBACK_MAP_VIEW: MapView = {
-  lng: -122.4194,
-  lat: 37.7749,
+  lng: -73.9857,
+  lat: 40.7484,
   zoom: 16,
 };
 

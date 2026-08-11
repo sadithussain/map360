@@ -1,18 +1,25 @@
 """Tests for ``GET /groups/{group_id}/map-state``."""
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from app.crud.location_pin_crud import (
+    create_location_pin as create_location_pin_crud,
+)
+from app.crud.location_pin_crud import list_location_pins_for_group
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
-from app.models.group_model import Group, Membership
+from app.models.group_model import Membership
 from app.models.location_pin_model import LocationPin
-from app.models.map_object_model import MapObject
-from app.models.user_model import User
-from app.schemas.map_schema import MapObjectResponse, MapStateResponse
+from app.schemas.map_schema import (
+    LocationPinCreate,
+    LocationPinResponse,
+    MapObjectResponse,
+    MapStateResponse,
+)
+from app.services.map_service import create_location_pin as create_location_pin_service
 from app.services.map_service import delete_all_location_pins as delete_all_location_pins_service
 from app.services.map_service import delete_location_pin as delete_location_pin_service
 from app.services.map_service import get_map_object as get_map_object_service
@@ -21,59 +28,19 @@ from app.services.map_service import list_map_objects as list_map_objects_servic
 from app.services.map_service import (
     update_map_object_transform as update_map_object_transform_service,
 )
+from conftest import make_group as _make_group, make_map_object as _make_map_object, make_pin as _make_pin, make_user as _make_user
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
-
-def _make_user(username: str) -> User:
-    user = User(
-        username=username,
-        email=f"{username}@example.com",
-        hashed_password="x",
-    )
-    user.id = uuid4()
-    user.experience_points = 0
-    user.created_at = datetime.now(UTC)
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
-
-
-def _make_pin(group_id, user_id) -> LocationPin:
-    pin = LocationPin(
-        group_id=group_id,
-        user_id=user_id,
-        osm_building_id=123,
-        lat=40.5,
-        lng=-73.9,
-        building_geometry={"type": "Polygon", "coordinates": [[[0, 0]]]},
-        label=None,
-    )
-    pin.id = uuid4()
-    pin.created_at = datetime.now(UTC)
-    return pin
-
-
-def _make_map_object(pin: LocationPin) -> MapObject:
-    map_object = MapObject(
-        group_id=pin.group_id,
-        pin_id=pin.id,
-        submission_id=uuid4(),
-        lat=pin.lat,
-        lng=pin.lng,
-        mesh_public_url="https://cdn/model.glb",
-    )
-    map_object.id = uuid4()
-    map_object.created_at = datetime.now(UTC)
-    # ``_map_object_to_response`` reads ``osm_building_id`` off the eager-loaded
-    # pin; the CRUD layer normally populates this relationship.
-    map_object.pin = pin
-    return map_object
+# A building footprint around (0, 0) plus a centroid inside it, used by the pin
+# creation tests. Keeping them together makes the "inside vs outside" cases
+# obvious.
+_INSIDE_GEOMETRY = {
+    "type": "Polygon",
+    "coordinates": [[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]],
+}
+_INSIDE_LAT = 0.5
+_INSIDE_LNG = 0.5
 
 
 def _pass_membership(monkeypatch, group) -> Membership:
@@ -603,3 +570,188 @@ def test_delete_all_pins_endpoint_returns_count(monkeypatch) -> None:
     _, awaited_group_id, awaited_user = service_mock.await_args.args
     assert awaited_group_id == group_id
     assert awaited_user is requester
+
+
+# --- Location pin creation ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_pin_rejects_non_member(monkeypatch) -> None:
+    user = _make_user("outsider")
+    group = _make_group(uuid4())
+
+    monkeypatch.setattr(
+        "app.services.map_service.get_group_by_id",
+        AsyncMock(return_value=group),
+    )
+    monkeypatch.setattr(
+        "app.services.map_service.get_membership_crud",
+        AsyncMock(return_value=None),
+    )
+    create_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.map_service.create_location_pin_crud", create_mock
+    )
+
+    payload = LocationPinCreate(
+        osm_building_id=123,
+        lat=_INSIDE_LAT,
+        lng=_INSIDE_LNG,
+        building_geometry=_INSIDE_GEOMETRY,
+        label="Cafe",
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        await create_location_pin_service(AsyncMock(), group.id, user, payload)
+
+    assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
+    create_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_pin_rejects_centroid_outside_geometry(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    create_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.map_service.create_location_pin_crud", create_mock
+    )
+
+    # lat/lng sit far outside the (0, 0)-(1, 1) footprint bounds.
+    payload = LocationPinCreate(
+        osm_building_id=123,
+        lat=40.5,
+        lng=-73.9,
+        building_geometry=_INSIDE_GEOMETRY,
+        label=None,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        await create_location_pin_service(AsyncMock(), group.id, user, payload)
+
+    assert exc_info.value.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    create_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_pin_persists_and_records_activity(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    pin = _make_pin(group.id, user.id, lat=_INSIDE_LAT, lng=_INSIDE_LNG, label="Cafe")
+    create_mock = AsyncMock(return_value=pin)
+    monkeypatch.setattr(
+        "app.services.map_service.create_location_pin_crud", create_mock
+    )
+    activity_mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.map_service.create_activity_event", activity_mock
+    )
+
+    payload = LocationPinCreate(
+        osm_building_id=pin.osm_building_id,
+        lat=_INSIDE_LAT,
+        lng=_INSIDE_LNG,
+        building_geometry=_INSIDE_GEOMETRY,
+        label="Cafe",
+    )
+    db = AsyncMock()
+    result = await create_location_pin_service(db, group.id, user, payload)
+
+    assert isinstance(result, LocationPinResponse)
+    assert result.id == pin.id
+    create_mock.assert_awaited_once()
+    # The contribution is recorded on the group's activity timeline and both the
+    # pin and the event are committed in the same transaction.
+    activity_mock.assert_awaited_once()
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_crud_create_location_pin_flushes_and_refreshes() -> None:
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    group_id = uuid4()
+    user_id = uuid4()
+    pin = await create_location_pin_crud(
+        db,
+        group_id=group_id,
+        user_id=user_id,
+        osm_building_id=456,
+        lat=_INSIDE_LAT,
+        lng=_INSIDE_LNG,
+        building_geometry=_INSIDE_GEOMETRY,
+        label="Bodega",
+    )
+
+    assert isinstance(pin, LocationPin)
+    assert pin.group_id == group_id
+    assert pin.user_id == user_id
+    assert pin.osm_building_id == 456
+    assert pin.label == "Bodega"
+    db.add.assert_called_once_with(pin)
+    db.flush.assert_awaited_once()
+    db.refresh.assert_awaited_once_with(pin)
+
+
+@pytest.mark.asyncio
+async def test_crud_list_location_pins_filters_by_group() -> None:
+    group_id = uuid4()
+    pins = [_make_pin(group_id, uuid4()), _make_pin(group_id, uuid4())]
+
+    scalars = MagicMock()
+    scalars.all.return_value = pins
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    listed = await list_location_pins_for_group(db, group_id)
+
+    assert listed == pins
+    statement = db.execute.call_args.args[0]
+    compiled = str(statement).lower()
+    assert "location_pins.group_id" in compiled
+
+
+def test_create_pin_endpoint_returns_201(monkeypatch) -> None:
+    requester = _make_user("requester")
+    group_id = uuid4()
+    pin = _make_pin(group_id, requester.id, lat=_INSIDE_LAT, lng=_INSIDE_LNG)
+
+    service_mock = AsyncMock(return_value=LocationPinResponse.model_validate(pin))
+    monkeypatch.setattr(
+        "app.routers.map_router.create_location_pin_service", service_mock
+    )
+
+    async def _override_get_db():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_authenticated_user] = lambda: requester
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        client = TestClient(app)
+        response = client.post(
+            f"/groups/{group_id}/pins",
+            json={
+                "osm_building_id": pin.osm_building_id,
+                "lat": _INSIDE_LAT,
+                "lng": _INSIDE_LNG,
+                "building_geometry": _INSIDE_GEOMETRY,
+                "label": None,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] == str(pin.id)
+    service_mock.assert_awaited_once()
+    _, awaited_group_id, awaited_user, awaited_payload = service_mock.await_args.args
+    assert awaited_group_id == group_id
+    assert awaited_user is requester
+    assert awaited_payload.osm_building_id == pin.osm_building_id

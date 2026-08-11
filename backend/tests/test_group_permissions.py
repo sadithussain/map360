@@ -14,42 +14,13 @@ These tests deliberately avoid a live database: the CRUD calls the helpers
 delegate to are replaced with ``AsyncMock`` via ``monkeypatch``.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from app.models.group_model import Group, Membership
-from app.models.user_model import User
 from app.services.group_service import is_group_member as is_group_member_service, is_group_owner as is_group_owner_service
+from conftest import make_group as _make_group, make_membership as _make_membership, make_user as _make_user
 from fastapi import HTTPException, status
 from unittest.mock import AsyncMock
-
-
-def _make_user(username: str) -> User:
-    """Build an in-memory ``User`` with server-generated fields populated."""
-    user = User(
-        username=username,
-        email=f"{username}@example.com",
-        hashed_password="x",
-    )
-    user.id = uuid4()
-    user.experience_points = 0
-    user.created_at = datetime.now(UTC)
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
-
-
-def _make_membership(group_id, user_id, role: str = "member") -> Membership:
-    membership = Membership(user_id=user_id, group_id=group_id, role=role)
-    membership.id = uuid4()
-    membership.joined_at = datetime.now(UTC)
-    return membership
 
 
 # --- is_group_member ------------------------------------------------------

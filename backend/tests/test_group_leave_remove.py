@@ -16,7 +16,6 @@ These tests deliberately avoid a live database: CRUD is exercised with a mocked
 ``AsyncSession`` and the router with FastAPI dependency overrides.
 """
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -25,38 +24,10 @@ from app.crud.group_crud import remove_membership as remove_membership_crud
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
-from app.models.group_model import Group, Membership
-from app.models.user_model import User
 from app.services.group_service import leave_group as leave_group_service, remove_group_member as remove_group_member_service
+from conftest import make_group as _make_group, make_membership as _make_membership, make_user as _make_user
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
-
-
-def _make_user(username: str) -> User:
-    """Build an in-memory ``User`` with server-generated fields populated."""
-    user = User(
-        username=username,
-        email=f"{username}@example.com",
-        hashed_password="x",
-    )
-    user.id = uuid4()
-    user.experience_points = 0
-    user.created_at = datetime.now(UTC)
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
-
-
-def _make_membership(group_id, user_id, role: str = "member") -> Membership:
-    membership = Membership(user_id=user_id, group_id=group_id, role=role)
-    membership.id = uuid4()
-    membership.joined_at = datetime.now(UTC)
-    return membership
 
 
 # --- CRUD -----------------------------------------------------------------

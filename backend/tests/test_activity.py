@@ -1,10 +1,14 @@
 """Tests for group social features (activity feed, growth, discovery)."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from app.crud.activity_crud import (
+    create_activity_event,
+    list_activity_events_for_group,
+)
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user as get_authenticated_user
 from app.main import app
@@ -15,7 +19,7 @@ from app.models.activity_model import (
     ACTIVITY_TARGET_PIN,
     ActivityEvent,
 )
-from app.models.group_model import Group, Membership
+from app.models.group_model import Membership
 from app.models.location_pin_model import LocationPin
 from app.models.map_object_model import MapObject
 from app.models.media_submission_model import MediaSubmission
@@ -30,22 +34,9 @@ from app.services.activity_service import (
 from app.services.activity_service import (
     get_group_places as get_group_places_service,
 )
+from conftest import make_group as _make_group, make_user as _make_user
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
-
-
-def _make_user(username: str) -> User:
-    user = User(username=username, email=f"{username}@example.com", hashed_password="x")
-    user.id = uuid4()
-    user.created_at = datetime.now(UTC)
-    return user
-
-
-def _make_group(owner_id) -> Group:
-    group = Group(name="Group", owner_id=owner_id)
-    group.id = uuid4()
-    group.created_at = datetime.now(UTC)
-    return group
 
 
 def _make_event(group_id, actor: User, *, created_at: datetime) -> ActivityEvent:
@@ -272,3 +263,82 @@ def test_object_placed_constants_exist() -> None:
     # Guards the event/target vocabulary the frontend and backfill rely on.
     assert ACTIVITY_EVENT_OBJECT_PLACED == "object_placed"
     assert ACTIVITY_TARGET_MAP_OBJECT == "map_object"
+
+
+# --- CRUD -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_crud_create_activity_event_flushes_without_committing() -> None:
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    group_id = uuid4()
+    actor_id = uuid4()
+    target_id = uuid4()
+
+    event = await create_activity_event(
+        db,
+        group_id=group_id,
+        actor_user_id=actor_id,
+        event_type=ACTIVITY_EVENT_PIN_CREATED,
+        target_type=ACTIVITY_TARGET_PIN,
+        target_id=target_id,
+        payload={"label": "Cafe"},
+    )
+
+    assert isinstance(event, ActivityEvent)
+    assert event.group_id == group_id
+    assert event.actor_user_id == actor_id
+    assert event.event_type == ACTIVITY_EVENT_PIN_CREATED
+    assert event.payload == {"label": "Cafe"}
+    db.add.assert_called_once_with(event)
+    db.flush.assert_awaited_once()
+    # The caller owns the transaction, so the event is flushed but not committed.
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_crud_list_activity_events_orders_newest_first() -> None:
+    group_id = uuid4()
+    actor = _make_user("alice")
+    events = [
+        _make_event(group_id, actor, created_at=datetime.now(UTC)),
+        _make_event(group_id, actor, created_at=datetime.now(UTC) - timedelta(days=1)),
+    ]
+
+    scalars = MagicMock()
+    scalars.all.return_value = events
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    listed = await list_activity_events_for_group(db, group_id, limit=25)
+
+    assert listed == events
+    statement = db.execute.call_args.args[0]
+    compiled = str(statement).lower()
+    assert "activity_events.group_id" in compiled
+    assert "order by activity_events.created_at desc" in compiled
+
+
+@pytest.mark.asyncio
+async def test_crud_list_activity_events_applies_before_cursor() -> None:
+    scalars = MagicMock()
+    scalars.all.return_value = []
+    result = MagicMock()
+    result.scalars.return_value = scalars
+
+    db = AsyncMock()
+    db.execute.return_value = result
+
+    await list_activity_events_for_group(
+        db, uuid4(), limit=10, before=datetime.now(UTC)
+    )
+
+    statement = db.execute.call_args.args[0]
+    compiled = str(statement).lower()
+    # The keyset cursor filters to events strictly older than ``before``.
+    assert "activity_events.created_at <" in compiled
