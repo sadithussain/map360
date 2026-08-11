@@ -4,6 +4,7 @@ import BuildingSelectionPanel from "../components/BuildingSelectionPanel";
 import ContributionCapturePanel from "../components/ContributionCapturePanel";
 import EmptyGroupMapState from "../components/EmptyGroupMapState";
 import MeshOrientationPanel from "../components/MeshOrientationPanel";
+import SocialPanel from "../components/SocialPanel";
 import { WorldMap } from "../components/WorldMap";
 import { useApp } from "../context/AppContext";
 import { useGroupMapState } from "../hooks/useGroupMapState";
@@ -21,6 +22,7 @@ import { setCachedMapState } from "../lib/mapStateCache";
 import type {
   LocationPinResponse,
   MapObjectResponse,
+  PlaceSummary,
   SelectedBuilding,
   SubmissionResponse,
 } from "../lib/types";
@@ -59,6 +61,12 @@ function AppShell() {
   const [previewScale, setPreviewScale] = useState(1);
   const [isSavingHeading, setIsSavingHeading] = useState(false);
   const [orientError, setOrientError] = useState("");
+  const [isSocialOpen, setIsSocialOpen] = useState(false);
+  const [flyToTarget, setFlyToTarget] = useState<{
+    lng: number;
+    lat: number;
+    nonce: number;
+  } | null>(null);
 
   const clearOrientation = useCallback(() => {
     setOrientingObject(null);
@@ -80,8 +88,13 @@ function AppShell() {
   const handleStartContribution = () => {
     clearOrientation();
     resetContributionFlow();
+    setIsSocialOpen(false);
     setContributionStep("selecting");
     setMissedClickHint("Click a building on the map to scan it.");
+  };
+
+  const handleFlyToPlace = (place: PlaceSummary) => {
+    setFlyToTarget({ lng: place.lng, lat: place.lat, nonce: Date.now() });
   };
 
   const handleObjectSelect = (object: MapObjectResponse | null) => {
@@ -355,6 +368,18 @@ function AppShell() {
             </button>
             <button
               type="button"
+              onClick={() => setIsSocialOpen((open) => !open)}
+              className={`pointer-events-auto rounded-md border px-4 py-2 text-sm font-medium shadow-sm transition ${
+                isSocialOpen
+                  ? "border-blue-300 bg-blue-50 text-blue-700"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+              title="View group activity, contributions, and discovery"
+            >
+              Activity
+            </button>
+            <button
+              type="button"
               onClick={handleStartContribution}
               className="pointer-events-auto rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
             >
@@ -404,7 +429,17 @@ function AppShell() {
         orientationPreviewHeading={orientingObject ? previewHeading : null}
         orientationPreviewScale={orientingObject ? previewScale : null}
         onObjectSelect={handleObjectSelect}
+        flyToTarget={flyToTarget}
       />
+
+      {isSocialOpen && activeGroupId && (
+        <SocialPanel
+          groupId={activeGroupId}
+          groupName={activeGroup?.name}
+          onFlyToPlace={handleFlyToPlace}
+          onClose={() => setIsSocialOpen(false)}
+        />
+      )}
 
       {showEmptyState && !orientingObject && (
         <EmptyGroupMapState groupName={activeGroup?.name} />

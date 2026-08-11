@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.routers import group_router, map_router, user_router
+from app.routers import activity_router, group_router, map_router, user_router
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,7 @@ async def catch_database_connection_errors(request: Request, call_next):
 app.include_router(user_router.router)
 app.include_router(group_router.router)
 app.include_router(map_router.router)
+app.include_router(activity_router.router)
 
 
 @app.get("/")

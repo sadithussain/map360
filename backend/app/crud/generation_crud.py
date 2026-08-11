@@ -7,6 +7,11 @@ authorization; these helpers only read and write rows.
 
 from uuid import UUID
 
+from app.crud.activity_crud import create_activity_event
+from app.models.activity_model import (
+    ACTIVITY_EVENT_OBJECT_PLACED,
+    ACTIVITY_TARGET_MAP_OBJECT,
+)
 from app.models.location_pin_model import LocationPin
 from app.models.map_object_model import MapObject
 from app.models.media_submission_model import (
@@ -93,6 +98,26 @@ async def mark_submission_ready(
         mesh_public_url=mesh_public_url,
     )
     db.add(map_object)
+    await db.flush()
+
+    # Record the placement on the group's activity timeline in the same
+    # transaction, attributed to the member who uploaded the source image.
+    await create_activity_event(
+        db,
+        group_id=submission.group_id,
+        actor_user_id=submission.user_id,
+        event_type=ACTIVITY_EVENT_OBJECT_PLACED,
+        target_type=ACTIVITY_TARGET_MAP_OBJECT,
+        target_id=map_object.id,
+        payload={
+            "label": pin.label,
+            "lat": map_object.lat,
+            "lng": map_object.lng,
+            "osm_building_id": pin.osm_building_id,
+            "pin_id": str(map_object.pin_id),
+            "map_object_id": str(map_object.id),
+        },
+    )
 
     await db.commit()
     await db.refresh(map_object)

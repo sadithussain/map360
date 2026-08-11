@@ -118,12 +118,12 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 
 ## 9. Social / Collaborative Features
 
-- [ ] Group activity feed model (event type, actor, target, timestamp)
-- [ ] Endpoint to fetch recent activity for a group
-- [ ] UI panel for group activity feed
-- [ ] Contributions log view (who added what, where, when)
-- [ ] Map growth indicator (count over time, simple chart)
-- [ ] In-map discovery view to navigate contributed places
+- [x] Group activity feed model (event type, actor, target, timestamp)
+- [x] Endpoint to fetch recent activity for a group
+- [x] UI panel for group activity feed
+- [x] Contributions log view (who added what, where, when)
+- [x] Map growth indicator (count over time, simple chart)
+- [x] In-map discovery view to navigate contributed places
 
 ---
 

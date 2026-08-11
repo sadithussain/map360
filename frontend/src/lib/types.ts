@@ -121,3 +121,61 @@ export type MapStateResponse = {
   pins: LocationPinResponse[];
   objects: MapObjectResponse[];
 };
+
+/** Kinds of actions recorded on a group's activity timeline. */
+export type ActivityEventType = "pin_created" | "object_placed";
+
+/**
+ * Denormalized snapshot stored with each event so the feed renders without
+ * refetching the target. Fields are best-effort and may be absent on old rows.
+ */
+export type ActivityEventPayload = {
+  label?: string | null;
+  lat?: number;
+  lng?: number;
+  osm_building_id?: number;
+  pin_id?: string;
+  map_object_id?: string;
+};
+
+export type ActivityEventResponse = {
+  id: string;
+  event_type: ActivityEventType;
+  actor_user_id: string;
+  actor_username: string;
+  target_type: string;
+  target_id: string | null;
+  payload: ActivityEventPayload | null;
+  created_at: string;
+};
+
+export type ActivityListResponse = {
+  events: ActivityEventResponse[];
+};
+
+/** One day on the map-growth chart. */
+export type GrowthPoint = {
+  date: string;
+  count: number;
+  cumulative: number;
+};
+
+export type GrowthResponse = {
+  points: GrowthPoint[];
+  total: number;
+};
+
+/** A contributed place surfaced in the in-map discovery view. */
+export type PlaceSummary = {
+  pin_id: string;
+  map_object_id: string;
+  label: string | null;
+  lat: number;
+  lng: number;
+  contributor_username: string | null;
+  created_at: string;
+};
+
+export type PlacesResponse = {
+  places: PlaceSummary[];
+};

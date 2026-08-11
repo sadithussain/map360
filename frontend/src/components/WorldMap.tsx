@@ -63,6 +63,11 @@ type WorldMapProps = {
   orientationPreviewScale?: number | null;
   /** Fired when an object is picked (or the pick misses, with null). */
   onObjectSelect?: (object: MapObjectResponse | null) => void;
+  /**
+   * Imperative fly-to target for the discovery view. The `nonce` makes
+   * re-selecting the same place re-trigger the camera move.
+   */
+  flyToTarget?: { lng: number; lat: number; nonce: number } | null;
 };
 
 /** Max distance (meters) between a click and a mesh's anchor to select it. */
@@ -164,6 +169,7 @@ export function WorldMap({
   orientationPreviewHeading = null,
   orientationPreviewScale = null,
   onObjectSelect,
+  flyToTarget = null,
 }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -597,6 +603,21 @@ export function WorldMap({
 
     meshLayer.previewObjectScale(selectedObjectId, orientationPreviewScale);
   }, [selectedObjectId, orientationPreviewScale, mapReady]);
+
+  // Fly to a place chosen from the discovery list. Keyed on the nonce so
+  // re-selecting the same place re-triggers the camera move.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !flyToTarget) {
+      return;
+    }
+
+    map.flyTo({
+      center: [flyToTarget.lng, flyToTarget.lat],
+      zoom: Math.max(map.getZoom(), 17),
+      essential: true,
+    });
+  }, [flyToTarget, mapReady]);
 
   // Snap the mesh back to its saved heading and scale when it is deselected.
   useEffect(() => {

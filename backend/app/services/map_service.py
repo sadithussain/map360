@@ -2,9 +2,12 @@
 
 from uuid import UUID
 
+from app.crud.activity_crud import create_activity_event
 from app.crud.generation_crud import (
     get_map_object_for_group,
     list_map_objects_for_group,
+)
+from app.crud.generation_crud import (
     update_map_object_transform as update_map_object_transform_crud,
 )
 from app.crud.group_crud import get_membership as get_membership_crud
@@ -22,6 +25,10 @@ from app.crud.location_pin_crud import (
 )
 from app.crud.location_pin_crud import (
     list_rendered_location_pins_for_group,
+)
+from app.models.activity_model import (
+    ACTIVITY_EVENT_PIN_CREATED,
+    ACTIVITY_TARGET_PIN,
 )
 from app.models.location_pin_model import LocationPin
 from app.models.map_object_model import MapObject
@@ -190,9 +197,7 @@ async def update_map_object_transform(
         )
 
     normalized_heading = heading % 360.0
-    clamped_scale = max(
-        MIN_MAP_OBJECT_SCALE, min(MAX_MAP_OBJECT_SCALE, scale)
-    )
+    clamped_scale = max(MIN_MAP_OBJECT_SCALE, min(MAX_MAP_OBJECT_SCALE, scale))
     obj = await update_map_object_transform_crud(
         db, obj, heading=normalized_heading, scale=clamped_scale
     )
@@ -228,6 +233,25 @@ async def create_location_pin(
         building_geometry=payload.building_geometry,
         label=payload.label,
     )
+
+    # Record the contribution on the group's activity timeline within the same
+    # transaction so the feed never drifts from the pins it describes.
+    await create_activity_event(
+        db,
+        group_id=group_id,
+        actor_user_id=current_user.id,
+        event_type=ACTIVITY_EVENT_PIN_CREATED,
+        target_type=ACTIVITY_TARGET_PIN,
+        target_id=pin.id,
+        payload={
+            "label": pin.label,
+            "lat": pin.lat,
+            "lng": pin.lng,
+            "osm_building_id": pin.osm_building_id,
+            "pin_id": str(pin.id),
+        },
+    )
+
     await db.commit()
     await db.refresh(pin)
     return _pin_to_response(pin)

@@ -1,13 +1,16 @@
 import { clearAuthToken, getAuthHeader } from "./auth";
 import type {
+  ActivityListResponse,
   GroupCreate,
   GroupJoinRequest,
   GroupResponse,
+  GrowthResponse,
   LocationPinCreate,
   LocationPinResponse,
   MapObjectResponse,
   MapStateResponse,
   MembershipResponse,
+  PlacesResponse,
   SubmissionResponse,
   Token,
   UserCreate,
@@ -267,4 +270,37 @@ export function listGroupGenerations(
   groupId: string,
 ): Promise<SubmissionResponse[]> {
   return apiFetch<SubmissionResponse[]>(`/groups/${groupId}/generations`);
+}
+
+/**
+ * Fetch a group's recent activity events (newest first). Pass `before` (the
+ * `created_at` of the oldest event you hold) to page backwards for "load more".
+ */
+export function getGroupActivity(
+  groupId: string,
+  options?: { limit?: number; before?: string },
+): Promise<ActivityListResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit != null) {
+    params.set("limit", String(options.limit));
+  }
+  if (options?.before) {
+    params.set("before", options.before);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<ActivityListResponse>(`/groups/${groupId}/activity${query}`);
+}
+
+/** Fetch per-day model placements (and running total) for a group's map. */
+export function getGroupGrowth(
+  groupId: string,
+  days?: number,
+): Promise<GrowthResponse> {
+  const query = days != null ? `?days=${encodeURIComponent(String(days))}` : "";
+  return apiFetch<GrowthResponse>(`/groups/${groupId}/growth${query}`);
+}
+
+/** Fetch a group's contributed places for the in-map discovery view. */
+export function getGroupPlaces(groupId: string): Promise<PlacesResponse> {
+  return apiFetch<PlacesResponse>(`/groups/${groupId}/places`);
 }

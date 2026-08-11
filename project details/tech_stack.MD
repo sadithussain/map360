@@ -38,7 +38,7 @@ The repo is a monorepo with two apps:
 | | |
 | --- | --- |
 | **Where** | `backend/app/main.py`, `backend/app/routers/`, `backend/app/dependencies/` |
-| **How** | ASGI web framework. Routers expose users, groups, map state, media submissions, and map-object endpoints. Dependencies inject the current user and DB session. CORS is configured for the Vite dev origin. Custom validation error handler flattens Pydantic errors into a single `detail` string for the UI. Generation runs as FastAPI `BackgroundTasks` after upload. |
+| **How** | ASGI web framework. Routers expose users, groups, map state, media submissions, map-object, and group social endpoints (activity feed, map growth, discoverable places under `app/routers/activity_router.py`). Dependencies inject the current user and DB session. CORS is configured for the Vite dev origin. Custom validation error handler flattens Pydantic errors into a single `detail` string for the UI. Generation runs as FastAPI `BackgroundTasks` after upload. |
 | **Why** | Async-first Python API with automatic OpenAPI docs (`/docs`), strong typing via Pydantic, and a clear dependency-injection model that fits JWT-protected routes. |
 
 ### Uvicorn
