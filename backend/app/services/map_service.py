@@ -5,6 +5,7 @@ from uuid import UUID
 from app.crud.generation_crud import (
     get_map_object_for_group,
     list_map_objects_for_group,
+    update_map_object_transform as update_map_object_transform_crud,
 )
 from app.crud.group_crud import get_membership as get_membership_crud
 from app.crud.location_pin_crud import (
@@ -26,6 +27,8 @@ from app.models.location_pin_model import LocationPin
 from app.models.map_object_model import MapObject
 from app.models.user_model import User
 from app.schemas.map_schema import (
+    MAX_MAP_OBJECT_SCALE,
+    MIN_MAP_OBJECT_SCALE,
     LocationPinCreate,
     LocationPinResponse,
     MapObjectResponse,
@@ -108,6 +111,8 @@ def _map_object_to_response(obj: MapObject) -> MapObjectResponse:
         lat=obj.lat,
         lng=obj.lng,
         mesh_public_url=obj.mesh_public_url,
+        heading=obj.heading if obj.heading is not None else 0.0,
+        scale=obj.scale if obj.scale is not None else 1.0,
     )
 
 
@@ -157,6 +162,40 @@ async def get_map_object(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Map object not found in this group.",
         )
+    return _map_object_to_response(obj)
+
+
+async def update_map_object_transform(
+    db: AsyncSession,
+    group_id: UUID,
+    object_id: UUID,
+    current_user: User,
+    *,
+    heading: float,
+    scale: float,
+) -> MapObjectResponse:
+    """Adjust a placed map object's yaw ``heading`` and uniform ``scale``.
+
+    Any member of the group may adjust the transform (no owner/role check).
+    Normalizes ``heading`` into ``[0, 360)`` and clamps ``scale`` into
+    ``[MIN_MAP_OBJECT_SCALE, MAX_MAP_OBJECT_SCALE]`` before persisting.
+    """
+    await _require_group_membership(db, group_id, current_user)
+
+    obj = await get_map_object_for_group(db, group_id, object_id)
+    if obj is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Map object not found in this group.",
+        )
+
+    normalized_heading = heading % 360.0
+    clamped_scale = max(
+        MIN_MAP_OBJECT_SCALE, min(MAX_MAP_OBJECT_SCALE, scale)
+    )
+    obj = await update_map_object_transform_crud(
+        db, obj, heading=normalized_heading, scale=clamped_scale
+    )
     return _map_object_to_response(obj)
 
 

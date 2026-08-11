@@ -58,8 +58,48 @@ class MapObjectResponse(BaseModel):
     lat: float
     lng: float
     mesh_url: str = Field(validation_alias="mesh_public_url")
+    heading: float = 0.0
+    scale: float = 1.0
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+# Bounds for the user-controlled uniform size multiplier applied on top of the
+# client-side auto-fit. Keep in sync with the frontend slider range.
+MIN_MAP_OBJECT_SCALE = 0.25
+MAX_MAP_OBJECT_SCALE = 2.0
+
+
+class MapObjectTransformUpdate(BaseModel):
+    """Request body for manually adjusting a placed map object's transform.
+
+    ``heading`` is a yaw in degrees clockwise from north; any finite value is
+    accepted and the service normalizes it into ``[0, 360)`` before persisting.
+    ``scale`` is a uniform size multiplier applied on top of the client-side
+    auto-fit, constrained to ``[MIN_MAP_OBJECT_SCALE, MAX_MAP_OBJECT_SCALE]``.
+    """
+
+    heading: float
+    scale: float
+
+    @field_validator("heading")
+    @classmethod
+    def validate_heading(cls, value: float) -> float:
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError("heading must be a finite number.")
+        return value
+
+    @field_validator("scale")
+    @classmethod
+    def validate_scale(cls, value: float) -> float:
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError("scale must be a finite number.")
+        if not MIN_MAP_OBJECT_SCALE <= value <= MAX_MAP_OBJECT_SCALE:
+            raise ValueError(
+                "scale must be between "
+                f"{MIN_MAP_OBJECT_SCALE} and {MAX_MAP_OBJECT_SCALE}."
+            )
+        return value
 
 
 class MapStateResponse(BaseModel):

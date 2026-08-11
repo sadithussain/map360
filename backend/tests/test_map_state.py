@@ -18,6 +18,9 @@ from app.services.map_service import delete_location_pin as delete_location_pin_
 from app.services.map_service import get_map_object as get_map_object_service
 from app.services.map_service import get_map_state as get_map_state_service
 from app.services.map_service import list_map_objects as list_map_objects_service
+from app.services.map_service import (
+    update_map_object_transform as update_map_object_transform_service,
+)
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
@@ -268,6 +271,89 @@ async def test_get_map_object_service_returns_object(monkeypatch) -> None:
     assert isinstance(result, MapObjectResponse)
     assert result.id == map_object.id
     assert result.osm_building_id == pin.osm_building_id
+
+
+@pytest.mark.asyncio
+async def test_map_object_response_defaults_scale_to_one(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    pin = _make_pin(group.id, user.id)
+    map_object = _make_map_object(pin)
+    monkeypatch.setattr(
+        "app.services.map_service.get_map_object_for_group",
+        AsyncMock(return_value=map_object),
+    )
+
+    result = await get_map_object_service(
+        AsyncMock(), group.id, map_object.id, user
+    )
+
+    assert result.scale == 1.0
+
+
+@pytest.mark.asyncio
+async def test_update_transform_normalizes_heading_and_clamps_scale(
+    monkeypatch,
+) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    pin = _make_pin(group.id, user.id)
+    map_object = _make_map_object(pin)
+    monkeypatch.setattr(
+        "app.services.map_service.get_map_object_for_group",
+        AsyncMock(return_value=map_object),
+    )
+
+    def _apply_transform(_db, obj, *, heading, scale):
+        obj.heading = heading
+        obj.scale = scale
+        return obj
+
+    crud_mock = AsyncMock(side_effect=_apply_transform)
+    monkeypatch.setattr(
+        "app.services.map_service.update_map_object_transform_crud", crud_mock
+    )
+
+    # Heading wraps into [0, 360) and out-of-range scale is clamped to the max.
+    result = await update_map_object_transform_service(
+        AsyncMock(), group.id, map_object.id, user, heading=450.0, scale=5.0
+    )
+
+    assert result.heading == 90.0
+    assert result.scale == 2.0
+    assert crud_mock.await_args.kwargs == {"heading": 90.0, "scale": 2.0}
+
+
+@pytest.mark.asyncio
+async def test_update_transform_404_when_missing(monkeypatch) -> None:
+    user = _make_user("member")
+    group = _make_group(user.id)
+    _pass_membership(monkeypatch, group)
+
+    monkeypatch.setattr(
+        "app.services.map_service.get_map_object_for_group",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_map_object_transform_service(
+            AsyncMock(), group.id, uuid4(), user, heading=0.0, scale=1.0
+        )
+
+    assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_transform_update_schema_rejects_out_of_range_scale() -> None:
+    from pydantic import ValidationError
+
+    from app.schemas.map_schema import MapObjectTransformUpdate
+
+    with pytest.raises(ValidationError):
+        MapObjectTransformUpdate(heading=0.0, scale=10.0)
 
 
 @pytest.mark.asyncio

@@ -81,6 +81,16 @@ type HighlightMaterial = THREE.Material & {
 type LoadedObject = {
   id: string;
   root: THREE.Object3D;
+  /** Anchor coordinates, kept so the matrix can be rebuilt on heading change. */
+  lng: number;
+  lat: number;
+  /** Heading (deg) currently baked into {@link modelMatrix}. */
+  heading: number;
+  /**
+   * Uniform user scale multiplier currently applied to {@link root}, on top of
+   * the client-side auto-fit baked into the model's own local scale.
+   */
+  scale: number;
   /**
    * MapLibre model matrix (mercator translate/scale/rotate). Composed with the
    * per-frame view-projection matrix at render time instead of being baked onto
@@ -111,9 +121,15 @@ const MESH_DEBUG: boolean =
  * units around an absolute coordinate ~0.5, which Float32 cannot resolve -
  * producing the "static textured blob".
  */
-function anchorMatrix(lng: number, lat: number): THREE.Matrix4 {
+function anchorMatrix(lng: number, lat: number, headingDeg = 0): THREE.Matrix4 {
   const merc = maplibregl.MercatorCoordinate.fromLngLat([lng, lat], 0);
   const scale = merc.meterInMercatorCoordinateUnits();
+  // Manual orientation: yaw around the model's own up axis (GLB Y) applied
+  // before the axis conversion, so it becomes a rotation about the world
+  // vertical after RotationX(π/2). Negated so increasing heading turns the
+  // building clockwise when viewed from above (i.e. degrees clockwise from
+  // north), matching how users read a compass dial.
+  const headingRad = THREE.MathUtils.degToRad(headingDeg);
   // Official MapLibre composition: translate to mercator position, scale meters
   // to mercator units with a flipped Y (mercator Y grows south), then rotate
   // GLB y-up into MapLibre's z-up frame. The negative Y is safe here because
@@ -122,7 +138,8 @@ function anchorMatrix(lng: number, lat: number): THREE.Matrix4 {
   return new THREE.Matrix4()
     .makeTranslation(merc.x, merc.y, merc.z)
     .scale(new THREE.Vector3(scale, -scale, scale))
-    .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2));
+    .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+    .multiply(new THREE.Matrix4().makeRotationY(-headingRad));
 }
 
 /** Parse a numeric height-like property, tolerating strings and nullish. */
@@ -433,6 +450,19 @@ export class GeneratedMeshLayer implements CustomLayerInterface {
   private readonly objects = new Map<string, LoadedObject>();
   private readonly loading = new Set<string>();
   private readonly highlightStart = new Map<string, number>();
+  /**
+   * Live, unsaved heading previews keyed by object id. When present, an
+   * override takes precedence over the server heading so a slider drag updates
+   * instantly and is not clobbered by background map-state polling until the
+   * user saves (which updates {@link desired}) or cancels (which clears it).
+   */
+  private readonly headingOverrides = new Map<string, number>();
+  /**
+   * Live, unsaved uniform scale previews keyed by object id, mirroring
+   * {@link headingOverrides}. Present while the user drags the scale slider;
+   * an override beats the server scale until the user saves or cancels.
+   */
+  private readonly scaleOverrides = new Map<string, number>();
 
   /** Latest desired objects, applied once the renderer is ready. */
   private desired: MapObjectResponse[] = [];
@@ -540,15 +570,123 @@ export class GeneratedMeshLayer implements CustomLayerInterface {
         this.disposeObject(object);
         this.objects.delete(id);
         this.highlightStart.delete(id);
+        this.headingOverrides.delete(id);
+        this.scaleOverrides.delete(id);
       }
     }
 
     for (const object of this.desired) {
-      if (this.objects.has(object.id) || this.loading.has(object.id)) {
+      const loaded = this.objects.get(object.id);
+      if (loaded) {
+        // Already loaded: apply any heading or scale change (from another
+        // member's edit arriving via polling, or a local preview override)
+        // without reloading the GLB, so the transform stays in sync cheaply.
+        this.refreshObjectMatrix(loaded, object);
+        continue;
+      }
+      if (this.loading.has(object.id)) {
         continue;
       }
       this.loadObject(object);
     }
+  }
+
+  /** Heading that should be shown for an object: live preview beats server. */
+  private effectiveHeading(object: MapObjectResponse): number {
+    return this.headingOverrides.get(object.id) ?? object.heading ?? 0;
+  }
+
+  /** Scale that should be shown for an object: live preview beats server. */
+  private effectiveScale(object: MapObjectResponse): number {
+    return this.scaleOverrides.get(object.id) ?? object.scale ?? 1;
+  }
+
+  /** Rebuild a loaded object's transform if its heading or scale changed. */
+  private refreshObjectMatrix(loaded: LoadedObject, object: MapObjectResponse): void {
+    let changed = false;
+
+    const heading = this.effectiveHeading(object);
+    if (heading !== loaded.heading) {
+      loaded.heading = heading;
+      loaded.modelMatrix = anchorMatrix(loaded.lng, loaded.lat, heading);
+      changed = true;
+    }
+
+    const scale = this.effectiveScale(object);
+    if (scale !== loaded.scale) {
+      loaded.scale = scale;
+      loaded.root.scale.setScalar(scale);
+      changed = true;
+    }
+
+    if (changed) {
+      this.map?.triggerRepaint();
+    }
+  }
+
+  /**
+   * Apply an unsaved heading preview to a placed object and re-render. Used
+   * while the user drags the orient slider before saving.
+   */
+  previewObjectHeading(objectId: string, headingDeg: number): void {
+    this.headingOverrides.set(objectId, headingDeg);
+    const loaded = this.objects.get(objectId);
+    if (loaded) {
+      loaded.heading = headingDeg;
+      loaded.modelMatrix = anchorMatrix(loaded.lng, loaded.lat, headingDeg);
+    }
+    this.map?.triggerRepaint();
+  }
+
+  /**
+   * Apply an unsaved uniform scale preview to a placed object and re-render.
+   * Used while the user drags the scale slider before saving. The multiplier is
+   * applied to {@link root} on top of the client-side auto-fit.
+   */
+  previewObjectScale(objectId: string, scale: number): void {
+    this.scaleOverrides.set(objectId, scale);
+    const loaded = this.objects.get(objectId);
+    if (loaded) {
+      loaded.scale = scale;
+      loaded.root.scale.setScalar(scale);
+    }
+    this.map?.triggerRepaint();
+  }
+
+  /**
+   * Drop any unsaved heading preview for an object, snapping it back to the
+   * last known server heading from {@link desired}.
+   */
+  clearHeadingOverride(objectId: string): void {
+    if (!this.headingOverrides.delete(objectId)) {
+      return;
+    }
+    const loaded = this.objects.get(objectId);
+    const object = this.desired.find((candidate) => candidate.id === objectId);
+    if (loaded && object) {
+      const heading = object.heading ?? 0;
+      loaded.heading = heading;
+      loaded.modelMatrix = anchorMatrix(loaded.lng, loaded.lat, heading);
+    }
+    this.map?.triggerRepaint();
+  }
+
+  /**
+   * Drop any unsaved scale preview for an object, snapping it back to the last
+   * known server scale from {@link desired}.
+   */
+  clearScaleOverride(objectId: string): void {
+    if (!this.scaleOverrides.delete(objectId)) {
+      return;
+    }
+    const loaded = this.objects.get(objectId);
+    const object = this.desired.find((candidate) => candidate.id === objectId);
+    if (loaded && object) {
+      const scale = object.scale ?? 1;
+      loaded.scale = scale;
+      loaded.root.scale.setScalar(scale);
+    }
+    this.map?.triggerRepaint();
   }
 
   private loadObject(object: MapObjectResponse): void {
@@ -584,11 +722,17 @@ export class GeneratedMeshLayer implements CustomLayerInterface {
         // The mercator anchor is stored, NOT applied to the object. It is
         // composed into the camera projection at render time so the mesh keeps
         // its meter-scale local coordinates (avoids Float32 precision collapse).
-        const modelMatrix = anchorMatrix(object.lng, object.lat);
+        const heading = this.effectiveHeading(object);
+        const modelMatrix = anchorMatrix(object.lng, object.lat, heading);
         logMeshDiagnostics(object, model, report, modelMatrix, stockHeight, targetSize);
 
         const root = new THREE.Object3D();
         root.add(model);
+        // Apply the user's uniform scale multiplier on top of the auto-fit
+        // (baked into the model's own scale). Kept on the root so live previews
+        // and polled edits can rescale without reloading or re-normalizing.
+        const scale = this.effectiveScale(object);
+        root.scale.setScalar(scale);
         // The custom projection matrix already frames the world; skip culling.
         root.traverse((child) => {
           child.frustumCulled = false;
@@ -620,6 +764,10 @@ export class GeneratedMeshLayer implements CustomLayerInterface {
         this.objects.set(object.id, {
           id: object.id,
           root,
+          lng: object.lng,
+          lat: object.lat,
+          heading,
+          scale,
           modelMatrix,
           originalEmissive,
         });

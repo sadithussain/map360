@@ -177,6 +177,25 @@ export function getMapObject(
   );
 }
 
+/**
+ * Adjust a placed map object's transform: yaw ``heading`` (degrees clockwise
+ * from north) and uniform ``scale`` multiplier. Any group member may adjust it.
+ */
+export function updateMapObjectTransform(
+  groupId: string,
+  objectId: string,
+  heading: number,
+  scale: number,
+): Promise<MapObjectResponse> {
+  return apiFetch<MapObjectResponse>(
+    `/groups/${groupId}/map-objects/${objectId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ heading, scale }),
+    },
+  );
+}
+
 export function createLocationPin(
   groupId: string,
   payload: LocationPinCreate,

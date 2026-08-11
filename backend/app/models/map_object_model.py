@@ -28,6 +28,12 @@ class MapObject(Base):
         lat: Latitude copied from the pin for direct map placement.
         lng: Longitude copied from the pin for direct map placement.
         mesh_public_url: Public URL of the generated ``.glb`` mesh.
+        heading: Yaw in degrees clockwise from north, applied when rendering
+            the mesh. Defaults to ``0`` (TRELLIS's raw orientation); any group
+            member can adjust it later.
+        scale: Uniform size multiplier applied on top of the client-side
+            auto-fit. Defaults to ``1`` (auto-fit size); any group member can
+            shrink or grow the mesh later.
         created_at: UTC timestamp set when the row is first created.
     """
 
@@ -61,6 +67,8 @@ class MapObject(Base):
     lat = Column(Float, nullable=False)
     lng = Column(Float, nullable=False)
     mesh_public_url = Column(String, nullable=False)
+    heading = Column(Float, nullable=False, default=0.0, server_default="0")
+    scale = Column(Float, nullable=False, default=1.0, server_default="1")
 
     created_at = Column(
         DateTime(timezone=True),

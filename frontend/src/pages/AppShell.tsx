@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import BuildingSelectionPanel from "../components/BuildingSelectionPanel";
 import ContributionCapturePanel from "../components/ContributionCapturePanel";
 import EmptyGroupMapState from "../components/EmptyGroupMapState";
+import MeshOrientationPanel from "../components/MeshOrientationPanel";
 import { WorldMap } from "../components/WorldMap";
 import { useApp } from "../context/AppContext";
 import { useGroupMapState } from "../hooks/useGroupMapState";
@@ -13,11 +14,13 @@ import {
   deleteAllLocationPins,
   deleteLocationPin,
   getGeneration,
+  updateMapObjectTransform,
 } from "../lib/api";
 import { isEmptyMapState } from "../lib/mapState";
 import { setCachedMapState } from "../lib/mapStateCache";
 import type {
   LocationPinResponse,
+  MapObjectResponse,
   SelectedBuilding,
   SubmissionResponse,
 } from "../lib/types";
@@ -50,6 +53,18 @@ function AppShell() {
   const [uploadError, setUploadError] = useState("");
   const [isClearingPins, setIsClearingPins] = useState(false);
   const [clearPinsError, setClearPinsError] = useState("");
+  const [orientingObject, setOrientingObject] =
+    useState<MapObjectResponse | null>(null);
+  const [previewHeading, setPreviewHeading] = useState(0);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [isSavingHeading, setIsSavingHeading] = useState(false);
+  const [orientError, setOrientError] = useState("");
+
+  const clearOrientation = useCallback(() => {
+    setOrientingObject(null);
+    setOrientError("");
+    setIsSavingHeading(false);
+  }, []);
 
   const resetContributionFlow = useCallback(() => {
     setContributionStep("idle");
@@ -63,9 +78,50 @@ function AppShell() {
   }, []);
 
   const handleStartContribution = () => {
+    clearOrientation();
     resetContributionFlow();
     setContributionStep("selecting");
     setMissedClickHint("Click a building on the map to scan it.");
+  };
+
+  const handleObjectSelect = (object: MapObjectResponse | null) => {
+    if (object === null) {
+      clearOrientation();
+      return;
+    }
+    setOrientingObject(object);
+    setPreviewHeading(object.heading ?? 0);
+    setPreviewScale(object.scale ?? 1);
+    setOrientError("");
+  };
+
+  const handleSaveHeading = async () => {
+    if (!activeGroupId || !orientingObject || isSavingHeading) {
+      return;
+    }
+
+    setIsSavingHeading(true);
+    setOrientError("");
+    try {
+      await updateMapObjectTransform(
+        activeGroupId,
+        orientingObject.id,
+        previewHeading,
+        previewScale,
+      );
+      const refreshed = await refreshMapState();
+      if (refreshed) {
+        setCachedMapState(activeGroupId, refreshed);
+      }
+      clearOrientation();
+    } catch (error) {
+      setOrientError(
+        error instanceof ApiError
+          ? error.message
+          : "Failed to save changes. Please try again.",
+      );
+      setIsSavingHeading(false);
+    }
   };
 
   const handleClearAllPins = async () => {
@@ -238,6 +294,18 @@ function AppShell() {
     };
   }, [contributionStep, activeGroupId, submission, refreshMapState]);
 
+  useEffect(() => {
+    if (!orientingObject) {
+      return;
+    }
+    const stillPresent = mapState?.objects.some(
+      (object) => object.id === orientingObject.id,
+    );
+    if (!stillPresent) {
+      clearOrientation();
+    }
+  }, [mapState, orientingObject, clearOrientation]);
+
   if (!activeGroupId) {
     return null;
   }
@@ -272,7 +340,8 @@ function AppShell() {
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-end gap-2 px-4">
+      {/* pr-16 clears MapLibre's top-right NavigationControl (zoom + compass). */}
+      <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-end gap-2 px-4 pr-16">
         {contributionStep === "idle" && (
           <>
             <button
@@ -296,7 +365,7 @@ function AppShell() {
       </div>
 
       {clearPinsError && contributionStep === "idle" && (
-        <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-end px-4">
+        <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex justify-end px-4 pr-16">
           <p className="rounded-md bg-red-50 px-3 py-1.5 text-sm text-red-700 shadow-sm">
             {clearPinsError}
           </p>
@@ -330,9 +399,29 @@ function AppShell() {
         selectedBuilding={selectedBuilding}
         onBuildingSelect={handleBuildingSelect}
         onMissedBuildingClick={handleMissedBuildingClick}
+        orientationEnabled={contributionStep === "idle"}
+        selectedObjectId={orientingObject?.id ?? null}
+        orientationPreviewHeading={orientingObject ? previewHeading : null}
+        orientationPreviewScale={orientingObject ? previewScale : null}
+        onObjectSelect={handleObjectSelect}
       />
 
-      {showEmptyState && <EmptyGroupMapState groupName={activeGroup?.name} />}
+      {showEmptyState && !orientingObject && (
+        <EmptyGroupMapState groupName={activeGroup?.name} />
+      )}
+
+      {contributionStep === "idle" && orientingObject && (
+        <MeshOrientationPanel
+          heading={previewHeading}
+          scale={previewScale}
+          isSaving={isSavingHeading}
+          error={orientError}
+          onHeadingChange={setPreviewHeading}
+          onScaleChange={setPreviewScale}
+          onSave={() => void handleSaveHeading()}
+          onCancel={clearOrientation}
+        />
+      )}
 
       {contributionStep === "confirming" && selectedBuilding && (
         <BuildingSelectionPanel

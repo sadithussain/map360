@@ -185,3 +185,19 @@ async def get_map_object_for_group(
         .where(MapObject.id == object_id, MapObject.group_id == group_id)
     )
     return result.scalar_one_or_none()
+
+
+async def update_map_object_transform(
+    db: AsyncSession,
+    map_object: MapObject,
+    *,
+    heading: float,
+    scale: float,
+) -> MapObject:
+    """Persist a new ``heading`` (yaw in degrees) and ``scale`` multiplier on a
+    map object. Commits."""
+    map_object.heading = heading
+    map_object.scale = scale
+    await db.commit()
+    await db.refresh(map_object)
+    return map_object

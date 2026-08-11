@@ -15,7 +15,7 @@ import {
 } from "../lib/buildingSelection";
 import { FALLBACK_MAP_VIEW, getInitialMapView } from "../lib/mapGeolocation";
 import { ensureMapLibreWorker } from "../lib/maplibreSetup";
-import { applyGreyMapStyle } from "../lib/mapGreyStyle";
+import { applyGreyMapStyle, setHiddenBuildingIds } from "../lib/mapGreyStyle";
 import { pinsBounds } from "../lib/mapState";
 import { GeneratedMeshLayer } from "../lib/meshLayer";
 import type {
@@ -47,7 +47,45 @@ type WorldMapProps = {
   selectedBuilding?: SelectedBuilding | null;
   onBuildingSelect?: (building: SelectedBuilding) => void;
   onMissedBuildingClick?: () => void;
+  /** When true, clicking near a placed mesh selects it for reorientation. */
+  orientationEnabled?: boolean;
+  /** Currently selected map object id (for orientation), or null. */
+  selectedObjectId?: string | null;
+  /**
+   * Live, unsaved heading (deg) to preview on the selected object while the
+   * user drags the orient slider. Null clears any preview.
+   */
+  orientationPreviewHeading?: number | null;
+  /**
+   * Live, unsaved uniform scale to preview on the selected object while the
+   * user drags the size slider. Null clears any preview.
+   */
+  orientationPreviewScale?: number | null;
+  /** Fired when an object is picked (or the pick misses, with null). */
+  onObjectSelect?: (object: MapObjectResponse | null) => void;
 };
+
+/** Max distance (meters) between a click and a mesh's anchor to select it. */
+const OBJECT_PICK_RADIUS_METERS = 30;
+
+/** Nearest map object to a clicked coordinate within the pick radius, if any. */
+function nearestObjectWithinRadius(
+  objects: MapObjectResponse[],
+  lngLat: maplibregl.LngLat,
+): MapObjectResponse | null {
+  let nearest: MapObjectResponse | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const object of objects) {
+    const distance = lngLat.distanceTo(
+      new maplibregl.LngLat(object.lng, object.lat),
+    );
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = object;
+    }
+  }
+  return nearest && nearestDistance <= OBJECT_PICK_RADIUS_METERS ? nearest : null;
+}
 
 function pinsToGeoJSON(
   pins: LocationPinResponse[] | undefined,
@@ -121,11 +159,18 @@ export function WorldMap({
   selectedBuilding = null,
   onBuildingSelect,
   onMissedBuildingClick,
+  orientationEnabled = false,
+  selectedObjectId = null,
+  orientationPreviewHeading = null,
+  orientationPreviewScale = null,
+  onObjectSelect,
 }: WorldMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const meshLayerRef = useRef<GeneratedMeshLayer | null>(null);
+  const orientationEnabledRef = useRef(orientationEnabled);
+  const onObjectSelectRef = useRef(onObjectSelect);
   // Object ids already shown for the current group, so only newly appeared
   // objects pulse. Reset when the active group changes.
   const seenObjectIdsRef = useRef<Set<string>>(new Set());
@@ -164,6 +209,14 @@ export function WorldMap({
   useEffect(() => {
     onMissedBuildingClickRef.current = onMissedBuildingClick;
   }, [onMissedBuildingClick]);
+
+  useEffect(() => {
+    orientationEnabledRef.current = orientationEnabled;
+  }, [orientationEnabled]);
+
+  useEffect(() => {
+    onObjectSelectRef.current = onObjectSelect;
+  }, [onObjectSelect]);
 
   const refreshSelectableBuildings = useCallback((map: maplibregl.Map) => {
     if (buildingSelectionPhaseRef.current !== "choosing") {
@@ -313,17 +366,22 @@ export function WorldMap({
     };
 
     const handleClick = (event: maplibregl.MapMouseEvent) => {
-      if (buildingSelectionPhaseRef.current !== "choosing") {
+      if (buildingSelectionPhaseRef.current === "choosing") {
+        const building = queryBuildingAtPoint(map, event.point);
+        if (building) {
+          onBuildingSelectRef.current?.(building);
+          return;
+        }
+
+        onMissedBuildingClickRef.current?.();
         return;
       }
 
-      const building = queryBuildingAtPoint(map, event.point);
-      if (building) {
-        onBuildingSelectRef.current?.(building);
-        return;
+      if (orientationEnabledRef.current) {
+        const objects = mapStateRef.current?.objects ?? [];
+        const object = nearestObjectWithinRadius(objects, event.lngLat);
+        onObjectSelectRef.current?.(object);
       }
-
-      onMissedBuildingClickRef.current?.();
     };
 
     const handleMouseMove = (event: maplibregl.MapMouseEvent) => {
@@ -445,12 +503,23 @@ export function WorldMap({
     const objects: MapObjectResponse[] = mapState?.objects ?? [];
     const meshLayer = meshLayerRef.current;
     meshLayer?.setObjects(objects);
-    // We intentionally no longer hide the stock gray building by osm_id: OSM /
-    // OpenFreeMap often merge many structures (terraces, blocks) into one shared
-    // id, so hiding erased whole streets. Instead each mesh queries the stock
-    // building height at its pin and scales/lifts to envelop that extrusion
-    // (see queryStockBuildingHeight in meshLayer.ts), so it stays the most
-    // visible object without touching neighboring buildings.
+    // Hide the stock gray building that shares each contributed mesh's footprint
+    // so the custom model replaces (rather than intersects) it. Filtering by the
+    // deduped osm_building_id list restores every other building; an empty list
+    // (no objects / all cleared) restores all stock footprints. This is a dual
+    // strategy: OSM / OpenFreeMap sometimes merge structures (terraces, blocks)
+    // into one shared id, so a hide can miss a feature or clear a neighbor. Each
+    // mesh also queries the stock building height at its pin and scales/lifts to
+    // envelop that extrusion (see queryStockBuildingHeight in meshLayer.ts), so
+    // it stays the most visible object even when the hide is imperfect.
+    const hiddenBuildingIds = [
+      ...new Set(
+        objects
+          .map((object) => object.osm_building_id)
+          .filter((id) => Number.isFinite(id)),
+      ),
+    ];
+    setHiddenBuildingIds(map, hiddenBuildingIds);
 
     const groupId = mapState?.group_id ?? null;
     // Fit the camera only on the first load of a group or when a new object
@@ -498,6 +567,48 @@ export function WorldMap({
     applySelectionCamera,
     syncBuildingSelectionVisuals,
   ]);
+
+  // Live-preview the selected object's heading while the orient slider moves.
+  useEffect(() => {
+    const meshLayer = meshLayerRef.current;
+    if (
+      !meshLayer ||
+      !mapReady ||
+      !selectedObjectId ||
+      orientationPreviewHeading == null
+    ) {
+      return;
+    }
+
+    meshLayer.previewObjectHeading(selectedObjectId, orientationPreviewHeading);
+  }, [selectedObjectId, orientationPreviewHeading, mapReady]);
+
+  // Live-preview the selected object's size while the scale slider moves.
+  useEffect(() => {
+    const meshLayer = meshLayerRef.current;
+    if (
+      !meshLayer ||
+      !mapReady ||
+      !selectedObjectId ||
+      orientationPreviewScale == null
+    ) {
+      return;
+    }
+
+    meshLayer.previewObjectScale(selectedObjectId, orientationPreviewScale);
+  }, [selectedObjectId, orientationPreviewScale, mapReady]);
+
+  // Snap the mesh back to its saved heading and scale when it is deselected.
+  useEffect(() => {
+    if (!selectedObjectId) {
+      return;
+    }
+
+    return () => {
+      meshLayerRef.current?.clearHeadingOverride(selectedObjectId);
+      meshLayerRef.current?.clearScaleOverride(selectedObjectId);
+    };
+  }, [selectedObjectId]);
 
   return (
     <div className="relative h-full w-full">

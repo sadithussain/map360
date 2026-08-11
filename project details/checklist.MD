@@ -112,6 +112,7 @@ A working task list derived from `outline.MD`. Items are grouped by product area
 - [x] Hide the default grey building (2D fill + 3D extrusion) under each contributed mesh so the generated model replaces the stock footprint
 - [x] Real-time or near-real-time update of group map when new object is added (silent map-state polling, ~20s)
 - [x] Visual indicator for newly added objects (short emissive pulse on the mesh)
+- [x] Manual mesh orientation: any group member can select a placed mesh and rotate it (persisted `heading` on `MapObject`, live slider preview, applied in the mesh layer)
 
 ---
 

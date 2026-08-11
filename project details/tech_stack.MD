@@ -38,7 +38,7 @@ The repo is a monorepo with two apps:
 | | |
 | --- | --- |
 | **Where** | `backend/app/main.py`, `backend/app/routers/`, `backend/app/dependencies/` |
-| **How** | ASGI web framework. Routers expose users, groups, and map endpoints. Dependencies inject the current user and DB session. CORS is configured for the Vite dev origin. Custom validation error handler flattens Pydantic errors into a single `detail` string for the UI. |
+| **How** | ASGI web framework. Routers expose users, groups, map state, media submissions, and map-object endpoints. Dependencies inject the current user and DB session. CORS is configured for the Vite dev origin. Custom validation error handler flattens Pydantic errors into a single `detail` string for the UI. Generation runs as FastAPI `BackgroundTasks` after upload. |
 | **Why** | Async-first Python API with automatic OpenAPI docs (`/docs`), strong typing via Pydantic, and a clear dependency-injection model that fits JWT-protected routes. |
 
 ### Uvicorn
@@ -109,9 +109,9 @@ The repo is a monorepo with two apps:
 
 | | |
 | --- | --- |
-| **Where** | `backend/requirements.txt` |
-| **How** | Enables FastAPI form/file parsing when multipart uploads are introduced (media submission flow). |
-| **Why** | Required dependency for file upload endpoints planned in the media/upload checklist section. |
+| **Where** | `backend/requirements.txt`; used by map/media upload routes in `backend/app/routers/map_router.py` |
+| **How** | Enables FastAPI form/file parsing for the single-image contribution upload (`multipart/form-data`). |
+| **Why** | Required dependency for the media submission endpoint that accepts the source photo before TRELLIS generation. |
 
 ### httpx + pytest + pytest-asyncio
 
@@ -182,7 +182,7 @@ The repo is a monorepo with two apps:
 | | |
 | --- | --- |
 | **Where** | `frontend/src/` (`pages/`, `components/`, `hooks/`, `lib/`, `context/`) |
-| **How** | UI for landing map, auth, groups, workspace shell, building selection, and media capture. Shared types live in `lib/types.ts`; API client in `lib/api.ts`. |
+| **How** | UI for landing map, auth, groups, workspace shell, building selection, single-photo capture, and generated-mesh display on the map. Shared types live in `lib/types.ts`; API client in `lib/api.ts`. |
 | **Why** | Component model fits interactive map + multi-step contribution flows; TypeScript keeps API contracts aligned with backend schemas. |
 
 ### React Router
@@ -205,9 +205,9 @@ The repo is a monorepo with two apps:
 
 | | |
 | --- | --- |
-| **Where** | `frontend/src/components/WorldMap.tsx`, `lib/maplibreSetup.ts`, `lib/mapGreyStyle.ts`, `lib/buildingSelection.ts`, `lib/mapGeolocation.ts` |
-| **How** | Renders the interactive 2D/3D-tilted geographic map: pan/zoom, grey restyle, geolocation-based initial view, GeoJSON pin layers, and `queryRenderedFeatures` for building pick/hover/select. Worker setup avoids CSP/worker path issues in Vite. |
-| **Why** | Open-source Mapbox GL compatible renderer—full control of basemap styling and feature querying without a Mapbox license for the core map experience. |
+| **Where** | `frontend/src/components/WorldMap.tsx`, `lib/maplibreSetup.ts`, `lib/mapGreyStyle.ts`, `lib/buildingSelection.ts`, `lib/mapGeolocation.ts`, `lib/meshLayer.ts` |
+| **How** | Renders the interactive 2D/3D-tilted geographic map: pan/zoom, grey restyle, geolocation-based initial view, GeoJSON pin layers, and `queryRenderedFeatures` for building pick/hover/select. Hosts a Three.js `CustomLayerInterface` for placed `.glb` meshes. Worker setup avoids CSP/worker path issues in Vite. |
+| **Why** | Open-source Mapbox GL compatible renderer—full control of basemap styling, feature querying, and custom WebGL layers without a Mapbox license for the core map experience. |
 
 ### Turf.js (`@turf/boolean-point-in-polygon`, `@turf/flatten`, `@turf/helpers`)
 
@@ -217,13 +217,15 @@ The repo is a monorepo with two apps:
 | **How** | Geometric helpers for building hit-testing and selection (point-in-polygon checks, flattening multipolygons, constructing Turf points from click coordinates). |
 | **Why** | Reliable geospatial predicates on the client when resolving which building footprint the user selected. |
 
-### Three.js / React Three Fiber / Drei
+### Three.js (MapLibre custom layer)
 
 | | |
 | --- | --- |
-| **Where** | Declared in `frontend/package.json` (`three`, `@react-three/fiber`, `@react-three/drei`); not yet used in `src/` |
-| **How** | Planned for loading and displaying generated 3D meshes (storefront models) on or alongside the group map once the processing pipeline produces assets. |
-| **Why** | Industry-standard WebGL stack with a React-friendly API for placing reconstructed models in the collaborative world view. |
+| **Where** | `frontend/src/lib/meshLayer.ts` (`GeneratedMeshLayer`), wired from `WorldMap.tsx`; uses `three` + `GLTFLoader` / `RoomEnvironment` |
+| **How** | MapLibre `CustomLayerInterface` loads each map object’s `.glb`, anchors it at the pin’s lat/lng via the mercator transform, normalizes/grounds the mesh to cover the stock building extrusion, and can pulse newly appeared objects. Group map state is refreshed by silent polling (~20s) in `useGroupMapState`. |
+| **Why** | Places reconstructed models in real-world map space without a separate 3D canvas. Bare Three.js fits MapLibre’s custom-layer API better than React Three Fiber for this use case. |
+
+> **Note:** `@react-three/fiber` and `@react-three/drei` remain in `frontend/package.json` but are unused; mesh display goes through the MapLibre custom layer above.
 
 ### vite-plugin-pwa (Workbox)
 
@@ -278,7 +280,7 @@ These appear on the roadmap (`checklist.MD`) but are **not** in the dependency t
 | Area | Likely direction | Purpose |
 | ---- | ---------------- | ------- |
 | Heavier background jobs | Celery/Redis (only if `BackgroundTasks` proves insufficient) | Durable retries / dead-lettering for generation jobs that outlive a process restart |
-| Real-time map updates | WebSocket (currently: client polls submission status) | Push new map objects to group members instantly |
+| Instant map updates | WebSocket (v1: silent map-state poll ~20s + submission-status poll) | Push new map objects to group members without polling latency |
 | Observability | Structured logging, Sentry | Errors and ops visibility |
 | Containers / CI | Docker, GitHub Actions (or similar) | Reproducible deploys and automated lint/test/build |
 
@@ -299,7 +301,8 @@ When those land, update this file with the same **where / how / why** pattern.
 | Media files + generated meshes | Supabase Storage (`media` + `meshes` buckets) |
 | Single-image 3D generation | TRELLIS on Colab Gradio via `gradio_client` (FastAPI `BackgroundTasks`) |
 | Basemap & building pick | MapLibre + OpenFreeMap tiles + Turf |
-| Generated 3D model display (soon) | Three.js / R3F / Drei |
+| Generated 3D model display | Three.js via MapLibre custom layer (`meshLayer.ts`) |
+| Near-real-time map refresh | Silent HTTP poll of group map state (~20s) |
 | Installable client | Vite PWA (vite-plugin-pwa) |
 | UI styling | Tailwind CSS v4 |
 | Routing | React Router |

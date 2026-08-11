@@ -9,6 +9,7 @@ from app.schemas.map_schema import (
     LocationPinCreate,
     LocationPinResponse,
     MapObjectResponse,
+    MapObjectTransformUpdate,
     MapStateResponse,
     SubmissionResponse,
 )
@@ -32,6 +33,9 @@ from app.services.map_service import delete_location_pin as delete_location_pin_
 from app.services.map_service import get_map_object as get_map_object_service
 from app.services.map_service import get_map_state as get_map_state_service
 from app.services.map_service import list_map_objects as list_map_objects_service
+from app.services.map_service import (
+    update_map_object_transform as update_map_object_transform_service,
+)
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -105,6 +109,29 @@ async def get_map_object(
 ) -> MapObjectResponse:
     """Return a single map object with its mesh URL, scoped to the group."""
     return await get_map_object_service(db, group_id, object_id, current_user)
+
+
+@router.patch(
+    "/groups/{group_id}/map-objects/{object_id}",
+    response_model=MapObjectResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def update_map_object_transform(
+    group_id: UUID,
+    object_id: UUID,
+    payload: MapObjectTransformUpdate,
+    current_user: User = Depends(get_authenticated_user),
+    db: AsyncSession = Depends(get_db),
+) -> MapObjectResponse:
+    """Adjust a placed map object's heading and scale. Any group member may."""
+    return await update_map_object_transform_service(
+        db,
+        group_id,
+        object_id,
+        current_user,
+        heading=payload.heading,
+        scale=payload.scale,
+    )
 
 
 @router.post(

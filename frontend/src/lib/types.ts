@@ -110,6 +110,10 @@ export type MapObjectResponse = {
   lat: number;
   lng: number;
   mesh_url: string;
+  /** Yaw in degrees clockwise from north applied when rendering the mesh. */
+  heading: number;
+  /** Uniform size multiplier applied on top of the client-side auto-fit. */
+  scale: number;
 };
 
 export type MapStateResponse = {
